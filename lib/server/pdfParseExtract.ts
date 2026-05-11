@@ -1,4 +1,5 @@
 import { extractPdfTextWithPdfJs } from "@/lib/server/extractPdfTextPdfJs";
+import { installPdfJsNodeGlobals } from "@/lib/server/pdfJsNodeGlobals";
 import { getPdfJsServerAssetFields, PDFJS_PDF_PARSE_PEER_VERSION } from "@/lib/server/pdfJsServerAssets";
 import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
 
@@ -7,6 +8,8 @@ import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
  * `pdf-parse` yalnızca çağrı anında yüklenir — Vercel’de route modülü yüklenirken çökme riski azalır.
  */
 export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
+  await installPdfJsNodeGlobals();
+
   let fromParse = "";
   try {
     const { PDFParse } = await import("pdf-parse");

@@ -1,4 +1,5 @@
 import { getPdfJsServerAssetFields, PDFJS_ROOT_VERSION } from "@/lib/server/pdfJsServerAssets";
+import { installPdfJsNodeGlobals } from "@/lib/server/pdfJsNodeGlobals";
 import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
 
 /**
@@ -6,6 +7,11 @@ import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
  * Tek `getDocument` geçişi — çift deneme gecikmeyi ikiye katlıyordu.
  */
 export async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
+  const globalsOk = await installPdfJsNodeGlobals();
+  if (!globalsOk) {
+    console.warn("[extractPdfTextWithPdfJs] DOMMatrix/ImageData/Path2D polyfill yok; pdfjs atlanıyor");
+    return "";
+  }
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const fields = getPdfJsServerAssetFields(PDFJS_ROOT_VERSION, { disableFontFace: false });
   const data = pdfBufferToUint8Array(buffer);
