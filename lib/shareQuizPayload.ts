@@ -90,6 +90,16 @@ function validatePayload(raw: unknown): ShareQuizPayloadV1 | null {
   return { v: 1, questions, result };
 }
 
+/**
+ * Paylaşım linki üretimi (sıkıştırmasız, senkron).
+ * Tarayıcıda panoya kopyalama tıklama hareketinde kalmak için `await` içermez.
+ */
+export function encodeSharePayloadSync(payload: ShareQuizPayloadV1): string {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  return `0.${base64UrlEncode(bytes)}`;
+}
+
 export async function encodeSharePayload(payload: ShareQuizPayloadV1): Promise<string> {
   const json = JSON.stringify(payload);
   const bytes = new TextEncoder().encode(json);

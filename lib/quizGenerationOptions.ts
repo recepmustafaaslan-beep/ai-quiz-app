@@ -4,13 +4,27 @@ export type QuizDifficultyLevel = "easy" | "medium" | "hard";
 
 export type QuizDifficultyPreset = "mixed" | QuizDifficultyLevel;
 
-export const QUIZ_QUESTION_COUNT_DEFAULT = 10;
-export const QUIZ_QUESTION_COUNT_MIN = 3;
-export const QUIZ_QUESTION_COUNT_MAX = 25;
+/** İstemci ve API: yalnızca bu üç değer kabul edilir */
+export const QUIZ_QUESTION_COUNT_CHOICES = [3, 5, 10] as const;
+export type QuizQuestionCountChoice = (typeof QUIZ_QUESTION_COUNT_CHOICES)[number];
+export const QUIZ_QUESTION_COUNT_DEFAULT: QuizQuestionCountChoice = 10;
 
 const PRESET_SET = new Set<string>(["mixed", "easy", "medium", "hard"]);
 
-export function parseQuestionCount(value: unknown): number {
+function nearestQuestionCountChoice(n: number): QuizQuestionCountChoice {
+  let best: QuizQuestionCountChoice = QUIZ_QUESTION_COUNT_CHOICES[0];
+  let bestDist = Math.abs(n - best);
+  for (const c of QUIZ_QUESTION_COUNT_CHOICES) {
+    const d = Math.abs(n - c);
+    if (d < bestDist) {
+      best = c;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+export function parseQuestionCount(value: unknown): QuizQuestionCountChoice {
   const raw =
     typeof value === "number"
       ? value
@@ -19,10 +33,10 @@ export function parseQuestionCount(value: unknown): number {
         : Number.NaN;
   if (!Number.isFinite(raw)) return QUIZ_QUESTION_COUNT_DEFAULT;
   const n = Math.round(raw);
-  return Math.min(
-    QUIZ_QUESTION_COUNT_MAX,
-    Math.max(QUIZ_QUESTION_COUNT_MIN, n),
-  );
+  if ((QUIZ_QUESTION_COUNT_CHOICES as readonly number[]).includes(n)) {
+    return n as QuizQuestionCountChoice;
+  }
+  return nearestQuestionCountChoice(n);
 }
 
 export function parseDifficultyPreset(value: unknown): QuizDifficultyPreset {
@@ -30,6 +44,30 @@ export function parseDifficultyPreset(value: unknown): QuizDifficultyPreset {
     typeof value === "string" ? value.trim().toLowerCase() : "";
   if (PRESET_SET.has(s)) return s as QuizDifficultyPreset;
   return "mixed";
+}
+
+/** Model "Kolay", "orta", "HARD" vb. döndürdüğünde şemaya oturtur */
+export function normalizeDifficultyForQuiz(raw: unknown): QuizDifficultyLevel | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().toLowerCase();
+  const map: Record<string, QuizDifficultyLevel> = {
+    easy: "easy",
+    e: "easy",
+    kolay: "easy",
+    basit: "easy",
+    beginner: "easy",
+    medium: "medium",
+    m: "medium",
+    orta: "medium",
+    normal: "medium",
+    intermediate: "medium",
+    hard: "hard",
+    h: "hard",
+    zor: "hard",
+    ileri: "hard",
+    advanced: "hard",
+  };
+  return map[s] ?? null;
 }
 
 /** 2:4:4 oranına yakın tam sayı dağılım (N=10 için tam 2/4/4). */
@@ -169,7 +207,8 @@ Pedagoji ve kalite kuralları:
 
 Çıktı biçimi:
 - Yalnızca geçerli JSON dön; markdown, kod bloğu veya açıklama metni ekleme.
-- Tam olarak ${questionCount} soru üret.
+- Kök tek nesne: yalnızca "questions" anahtarı (dizi); başlık veya ek alan yok.
+- Tam olarak ${questionCount} soru üret; çıktıyı yarım bırakma.
 
 JSON şablonu (birebir anahtarlar):
 {

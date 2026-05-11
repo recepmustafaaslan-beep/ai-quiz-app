@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyTextToClipboardSync } from "@/lib/copyToClipboard";
 import {
   buildPaylasUrl,
-  encodeSharePayload,
+  encodeSharePayloadSync,
   type ShareQuizPayloadV1,
 } from "@/lib/shareQuizPayload";
 
@@ -53,7 +54,6 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     maxPoints: number;
   } | null>(null);
 
-  const [shareBusy, setShareBusy] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
@@ -88,9 +88,8 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     }
   }, [roundDone]);
 
-  const handleShareFriend = useCallback(async () => {
+  const handleShareFriend = useCallback(() => {
     if (!roundDone) return;
-    setShareBusy(true);
     setShareFeedback(null);
     setShareUrl(null);
     try {
@@ -110,30 +109,36 @@ export default function GeneratedQuizExperience({ questions }: Props) {
           maxPoints: roundDone.maxPoints,
         },
       };
-      const token = await encodeSharePayload(payload);
+      const token = encodeSharePayloadSync(payload);
       const url = buildPaylasUrl(window.location.origin, token);
       setShareUrl(url);
       const long = url.length > 60_000;
-      try {
-        await navigator.clipboard.writeText(url);
+      if (copyTextToClipboardSync(url)) {
         setShareFeedback(
           long
-            ? "Link panoya kopyalandı (oldukça uzun; sorun olursa aşağıdan seçerek kopyala)."
-            : "Link panoya kopyalandı. Arkadaşına gönder!",
+            ? "Link panoya kopyalandı (uzun link; gerekirse aşağıdan tekrar kopyala)."
+            : "Link panoya kopyalandı — arkadaşına gönder!",
         );
-      } catch {
+      } else {
         setShareFeedback(
           long
-            ? "Panoya kopyalanamadı. Link uzun; aşağıdan parça parça seçebilirsin."
-            : "Panoya kopyalanamadı. Aşağıdaki linki elle seçip kopyala.",
+            ? "Panoya otomatik kopyalanamadı. Aşağıdaki «Panoya kopyala» ile dene."
+            : "Panoya otomatik kopyalanamadı. Aşağıdaki «Panoya kopyala» butonuna dokun.",
         );
       }
     } catch {
       setShareFeedback("Paylaşım oluşturulamadı. Tekrar dene.");
-    } finally {
-      setShareBusy(false);
     }
   }, [roundDone, questions]);
+
+  const handleCopyShareUrl = useCallback(() => {
+    if (!shareUrl) return;
+    if (copyTextToClipboardSync(shareUrl)) {
+      setShareFeedback("Panoya kopyalandı.");
+    } else {
+      setShareFeedback("Kopyalanamadı: linki elle seçip kopyala (veya tarayıcı iznini kontrol et).");
+    }
+  }, [shareUrl]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -431,10 +436,9 @@ export default function GeneratedQuizExperience({ questions }: Props) {
               <button
                 type="button"
                 onClick={handleShareFriend}
-                disabled={shareBusy}
-                className="rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition duration-300 hover:border-cyan-300/50 hover:bg-cyan-500/25 disabled:cursor-wait disabled:opacity-60"
+                className="rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition duration-300 hover:border-cyan-300/50 hover:bg-cyan-500/25"
               >
-                {shareBusy ? "Link hazırlanıyor…" : "Arkadaşına gönder"}
+                Arkadaşına gönder
               </button>
               <button
                 type="button"
@@ -450,9 +454,18 @@ export default function GeneratedQuizExperience({ questions }: Props) {
             )}
             {shareUrl && (
               <div className="relative mt-4 text-left">
-                <label htmlFor="share-quiz-url" className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-                  Paylaşım linki
-                </label>
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <label htmlFor="share-quiz-url" className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                    Paylaşım linki
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCopyShareUrl}
+                    className="shrink-0 rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-950 shadow-[0_0_20px_-4px_rgba(34,211,238,0.6)] transition hover:brightness-110 active:scale-[0.98]"
+                  >
+                    Panoya kopyala
+                  </button>
+                </div>
                 <input
                   id="share-quiz-url"
                   readOnly

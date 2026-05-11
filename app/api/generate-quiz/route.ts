@@ -18,12 +18,15 @@ import {
   buildRepairSystemPrompt,
   buildTargetDifficultyOrder,
   countsMatchTarget,
+  normalizeDifficultyForQuiz,
   parseDifficultyPreset,
   parseQuestionCount,
   rebalanceToTargets,
   targetCountsForPreset,
   type QuizDifficultyPreset,
 } from "@/lib/quizGenerationOptions";
+import { tryParseQuizModelJson } from "@/lib/parseQuizModelJson";
+import { truncateQuizSourceText } from "@/lib/server/truncateQuizSourceText";
 
 export const runtime = "nodejs";
 
@@ -55,8 +58,12 @@ function getOpenAIClient(): OpenAI {
 
 const QUIZ_MODEL = process.env.OPENAI_QUIZ_MODEL?.trim() || "gpt-4o-mini";
 
-/** Üretimde maxDuration (60s) içinde kal; geliştirmede daha uzun model beklemesi için. */
-const OPENAI_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 120_000 : 50_000;
+/** Üretimde maxDuration (60s) içinde kal; tamamlama + repair için pay bırakılır */
+const OPENAI_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 120_000 : 44_000;
+const QUIZ_MAX_COMPLETION_TOKENS = 16_000;
+const QUIZ_FILL_MAX_COMPLETION_TOKENS = 5_000;
+const REPAIR_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 45_000 : 26_000;
+const FILL_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 35_000 : 20_000;
 
 function jsonError(code: QuizErrorCodeType, status: number) {
   return NextResponse.json({ code, error: getQuizUserMessage(code) }, { status });
@@ -106,10 +113,6 @@ function extractAssistantCompletionText(message: {
   return { text: "", refusal: topRefusal };
 }
 
-function isDifficultyValue(d: unknown): d is Difficulty {
-  return d === "easy" || d === "medium" || d === "hard";
-}
-
 function sanitizeQuizQuestionsFromParsed(
   parsed: QuizResponse,
   limit: number,
@@ -124,17 +127,20 @@ function sanitizeQuizQuestionsFromParsed(
       const idx = typeof idxRaw === "number" ? idxRaw : Number(idxRaw);
       return { q, idx };
     })
-    .filter(
-      ({ q, idx }) =>
+    .filter(({ q, idx }) => {
+      const d = normalizeDifficultyForQuiz(q.difficulty);
+      return (
         typeof q?.question === "string" &&
         Array.isArray(q?.options) &&
         q.options.length === 4 &&
         Number.isInteger(idx) &&
         [0, 1, 2, 3].includes(idx) &&
-        isDifficultyValue(q.difficulty),
-    )
+        d !== null
+      );
+    })
     .slice(0, limit)
     .map(({ q, idx }) => {
+      const d = normalizeDifficultyForQuiz(q.difficulty)!;
       const rawEx =
         typeof (q as { explanation?: unknown }).explanation === "string"
           ? String((q as { explanation?: string }).explanation).trim()
@@ -148,10 +154,77 @@ function sanitizeQuizQuestionsFromParsed(
           String(q.options[3]),
         ] as [string, string, string, string],
         correctAnswerIndex: idx as 0 | 1 | 2 | 3,
-        difficulty: q.difficulty as Difficulty,
+        difficulty: d,
         explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
       };
     });
+}
+
+async function runOpenAiQuizJson(
+  client: OpenAI,
+  model: string,
+  system: string,
+  user: string,
+  maxOut: number,
+  temperature: number,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const completion = await client.chat.completions.create(
+    {
+      model,
+      temperature,
+      max_completion_tokens: maxOut,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    },
+    { signal },
+  );
+  const { text, refusal } = extractAssistantCompletionText(completion.choices[0]?.message);
+  if (refusal || !text?.trim()) return null;
+  return text;
+}
+
+/** Eksik soru sayısı için kısa ikinci tur (küçük çıktı) */
+async function generateFillInQuestions(
+  client: OpenAI,
+  model: string,
+  sourceText: string,
+  need: number,
+  difficultiesNeeded: Difficulty[],
+  signal: AbortSignal,
+): Promise<QuizResponse | null> {
+  if (need <= 0 || difficultiesNeeded.length !== need) return null;
+  const orderHint = difficultiesNeeded.map((d, i) => `${i + 1}:${d}`).join(", ");
+  const sys = [
+    "Görev: Verilen ders notundan yalnızca eksik kalan quiz sorularını üret.",
+    'Çıktı: yalnızca geçerli JSON nesnesi, kök anahtar "questions" (dizi).',
+    `Tam olarak ${need} soru üret; soruların difficulty alanı şu sıraya uymalı: ${orderHint}`,
+    "Her soru: question (string), options (tam 4 string), correctAnswerIndex (0-3 tam sayı), difficulty, explanation (string).",
+    "Akademik Türkçe; tek doğru şık.",
+  ].join(" ");
+  const user = `Ders metni:\n${sourceText}`;
+  let raw: string | null;
+  try {
+    raw = await runOpenAiQuizJson(
+      client,
+      model,
+      sys,
+      user,
+      QUIZ_FILL_MAX_COMPLETION_TOKENS,
+      0.32,
+      signal,
+    );
+  } catch (e) {
+    console.warn("[generate-quiz] generateFillInQuestions request failed", e);
+    return null;
+  }
+  if (!raw) return null;
+  const loose = tryParseQuizModelJson(raw);
+  if (!loose) return null;
+  return { questions: loose.questions as QuizResponse["questions"] };
 }
 
 async function repairQuizResponseJson(
@@ -171,6 +244,7 @@ async function repairQuizResponseJson(
         model,
         temperature: 0.15,
         max_completion_tokens: 8192,
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: sys },
           {
@@ -188,6 +262,10 @@ async function repairQuizResponseJson(
 
   const { text, refusal } = extractAssistantCompletionText(completion.choices[0]?.message);
   if (refusal || !text?.trim()) return null;
+  const loose = tryParseQuizModelJson(text);
+  if (loose && Array.isArray(loose.questions)) {
+    return { questions: loose.questions as QuizResponse["questions"] };
+  }
   try {
     return JSON.parse(text) as QuizResponse;
   } catch {
@@ -357,30 +435,25 @@ export async function POST(req: Request) {
     return resolved.response;
   }
   const { pdfText, questionCount, difficultyPreset } = resolved;
+  const pdfForModel = truncateQuizSourceText(pdfText);
   const targetOrder = buildTargetDifficultyOrder(difficultyPreset, questionCount);
   const targetCounts = targetCountsForPreset(difficultyPreset, questionCount);
   const systemPrompt = buildQuizSystemPrompt(questionCount, difficultyPreset);
 
-  let completion;
+  const client = getOpenAIClient();
+  const model = QUIZ_MODEL;
+
+  let raw: string | null;
   try {
     const signal = AbortSignal.timeout(OPENAI_TIMEOUT_MS);
-    completion = await getOpenAIClient().chat.completions.create(
-      {
-        model: QUIZ_MODEL,
-        temperature: 0.35,
-        max_completion_tokens: 8192,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: pdfText,
-          },
-        ],
-      },
-      { signal },
+    raw = await runOpenAiQuizJson(
+      client,
+      model,
+      systemPrompt,
+      pdfForModel,
+      QUIZ_MAX_COMPLETION_TOKENS,
+      0.3,
+      signal,
     );
   } catch (error) {
     const code = mapOpenAISdkErrorToCode(error);
@@ -390,17 +463,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const { text: rawContent, refusal } = extractAssistantCompletionText(completion.choices[0]?.message);
-  if (refusal) {
-    return NextResponse.json(
-      {
-        code: QuizErrorCode.MODEL_REFUSED,
-        error: getQuizUserMessage(QuizErrorCode.MODEL_REFUSED),
-      },
-      { status: 502 },
-    );
-  }
-  const raw = rawContent;
   if (!raw?.trim()) {
     return NextResponse.json(
       { code: QuizErrorCode.MODEL_EMPTY, error: getQuizUserMessage(QuizErrorCode.MODEL_EMPTY) },
@@ -408,17 +470,22 @@ export async function POST(req: Request) {
     );
   }
 
+  const looseFirst = tryParseQuizModelJson(raw);
   let parsed: QuizResponse;
-  try {
-    parsed = JSON.parse(raw) as QuizResponse;
-  } catch {
-    return NextResponse.json(
-      {
-        code: QuizErrorCode.MODEL_JSON_INVALID,
-        error: getQuizUserMessage(QuizErrorCode.MODEL_JSON_INVALID),
-      },
-      { status: 502 },
-    );
+  if (looseFirst && Array.isArray(looseFirst.questions)) {
+    parsed = { questions: looseFirst.questions as QuizResponse["questions"] };
+  } else {
+    try {
+      parsed = JSON.parse(raw) as QuizResponse;
+    } catch {
+      return NextResponse.json(
+        {
+          code: QuizErrorCode.MODEL_JSON_INVALID,
+          error: getQuizUserMessage(QuizErrorCode.MODEL_JSON_INVALID),
+        },
+        { status: 502 },
+      );
+    }
   }
 
   let sanitizedQuestions: QuizQuestion[];
@@ -435,55 +502,103 @@ export async function POST(req: Request) {
     );
   }
 
+  const rawQuestionCount = Array.isArray(parsed.questions) ? parsed.questions.length : 0;
+
+  const shapeOkResponse = (qs: QuizQuestion[]): NextResponse | null => {
+    if (qs.length === questionCount && countsMatchTarget(qs, targetCounts)) {
+      return NextResponse.json({ questions: qs });
+    }
+    if (qs.length === questionCount) {
+      console.warn("[generate-quiz] model difficulty counts off; applying target rebalance", {
+        easy: qs.filter((q) => q.difficulty === "easy").length,
+        medium: qs.filter((q) => q.difficulty === "medium").length,
+        hard: qs.filter((q) => q.difficulty === "hard").length,
+        questionCount,
+        difficultyPreset,
+      });
+      return NextResponse.json({ questions: rebalanceToTargets(qs, targetOrder) });
+    }
+    return null;
+  };
+
+  const firstOk = shapeOkResponse(sanitizedQuestions);
+  if (firstOk) return firstOk;
+
   if (
-    sanitizedQuestions.length === questionCount &&
-    countsMatchTarget(sanitizedQuestions, targetCounts)
+    sanitizedQuestions.length !== questionCount &&
+    (sanitizedQuestions.length > 0 || rawQuestionCount > 0)
   ) {
-    return NextResponse.json({ questions: sanitizedQuestions });
-  }
-
-  if (sanitizedQuestions.length === questionCount) {
-    console.warn("[generate-quiz] model difficulty counts off; applying target rebalance", {
-      easy: sanitizedQuestions.filter((q) => q.difficulty === "easy").length,
-      medium: sanitizedQuestions.filter((q) => q.difficulty === "medium").length,
-      hard: sanitizedQuestions.filter((q) => q.difficulty === "hard").length,
-      questionCount,
-      difficultyPreset,
-    });
-    return NextResponse.json({
-      questions: rebalanceToTargets(sanitizedQuestions, targetOrder),
-    });
-  }
-
-  if (sanitizedQuestions.length >= 1) {
     try {
-      const repairMs = process.env.NODE_ENV === "development" ? 45_000 : 20_000;
       const repaired = await repairQuizResponseJson(
-        getOpenAIClient(),
-        QUIZ_MODEL,
+        client,
+        model,
         parsed,
         questionCount,
         difficultyPreset,
-        AbortSignal.timeout(repairMs),
+        AbortSignal.timeout(REPAIR_TIMEOUT_MS),
       );
       if (repaired) {
-        const second = sanitizeQuizQuestionsFromParsed(repaired, questionCount);
-        if (
-          second.length === questionCount &&
-          countsMatchTarget(second, targetCounts)
-        ) {
-          return NextResponse.json({ questions: second });
-        }
-        if (second.length === questionCount) {
-          console.warn("[generate-quiz] repair ok but counts off; rebalance");
-          return NextResponse.json({
-            questions: rebalanceToTargets(second, targetOrder),
-          });
-        }
-        sanitizedQuestions = second;
+        parsed = repaired;
+        sanitizedQuestions = sanitizeQuizQuestionsFromParsed(repaired, questionCount);
+        const afterRepair = shapeOkResponse(sanitizedQuestions);
+        if (afterRepair) return afterRepair;
       }
     } catch (repairErr) {
       console.warn("[generate-quiz] repair path failed", repairErr);
+    }
+  }
+
+  if (sanitizedQuestions.length >= 1 && sanitizedQuestions.length < questionCount) {
+    try {
+      const k = sanitizedQuestions.length;
+      const balanced = rebalanceToTargets(sanitizedQuestions, targetOrder.slice(0, k));
+      const suffixTargets = targetOrder.slice(k);
+      const fillParsed = await generateFillInQuestions(
+        client,
+        model,
+        pdfForModel,
+        suffixTargets.length,
+        suffixTargets,
+        AbortSignal.timeout(FILL_TIMEOUT_MS),
+      );
+      if (fillParsed) {
+        const filledPart = sanitizeQuizQuestionsFromParsed(fillParsed, suffixTargets.length);
+        if (filledPart.length === suffixTargets.length) {
+          const merged = [...balanced, ...filledPart];
+          const mergedOk = shapeOkResponse(merged);
+          if (mergedOk) return mergedOk;
+        }
+      }
+    } catch (fillErr) {
+      console.warn("[generate-quiz] fill-in path failed", fillErr);
+    }
+  }
+
+  if (sanitizedQuestions.length !== questionCount) {
+    try {
+      const retrySys = `${buildQuizSystemPrompt(questionCount, difficultyPreset)}\n\nKRİTİK: Önceki yanıt soru sayısı veya şema için yetersiz kaldı. Bu yanıtta mutlaka tam ${questionCount} soru, doğru difficulty dağılımı ve eksiksiz JSON üret.`;
+      const retryRaw = await runOpenAiQuizJson(
+        client,
+        model,
+        retrySys,
+        pdfForModel,
+        QUIZ_MAX_COMPLETION_TOKENS,
+        0.22,
+        AbortSignal.timeout(Math.min(OPENAI_TIMEOUT_MS, 34_000)),
+      );
+      if (retryRaw) {
+        const loose2 = tryParseQuizModelJson(retryRaw);
+        if (loose2?.questions) {
+          const parsed2: QuizResponse = {
+            questions: loose2.questions as QuizResponse["questions"],
+          };
+          sanitizedQuestions = sanitizeQuizQuestionsFromParsed(parsed2, questionCount);
+          const retryOk = shapeOkResponse(sanitizedQuestions);
+          if (retryOk) return retryOk;
+        }
+      }
+    } catch (retryErr) {
+      console.warn("[generate-quiz] retry generation failed", retryErr);
     }
   }
 

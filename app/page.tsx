@@ -14,10 +14,10 @@ import {
   QUIZ_UPLOAD_LIMITS,
 } from "@/lib/quizErrors";
 import {
+  QUIZ_QUESTION_COUNT_CHOICES,
   QUIZ_QUESTION_COUNT_DEFAULT,
-  QUIZ_QUESTION_COUNT_MAX,
-  QUIZ_QUESTION_COUNT_MIN,
   type QuizDifficultyPreset,
+  type QuizQuestionCountChoice,
 } from "@/lib/quizGenerationOptions";
 
 /** Ders notu / çalışma masası — Unsplash (ücretsiz kullanım) */
@@ -26,12 +26,33 @@ const LANDING_BG =
 
 type Difficulty = "easy" | "medium" | "hard";
 
+const QUESTION_VIBE: Record<
+  QuizQuestionCountChoice,
+  { emoji: string; line: string }
+> = {
+  3: { emoji: "⚡", line: "Flash tur" },
+  5: { emoji: "✨", line: "Ritim modu" },
+  10: { emoji: "🔥", line: "Boss seviye" },
+};
+
+const DIFFICULTY_VIBE: Record<
+  QuizDifficultyPreset,
+  { emoji: string; line: string; short: string }
+> = {
+  mixed: { emoji: "🔀", line: "Hepsi bir arada", short: "Mix" },
+  easy: { emoji: "🌿", line: "Chill & net", short: "Kolay" },
+  medium: { emoji: "⚖️", line: "Dengeli tempo", short: "Orta" },
+  hard: { emoji: "🧠", line: "Pro challenge", short: "Zor" },
+};
+
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [questionCount, setQuestionCount] = useState(QUIZ_QUESTION_COUNT_DEFAULT);
+  const [questionCount, setQuestionCount] = useState<QuizQuestionCountChoice>(
+    QUIZ_QUESTION_COUNT_DEFAULT,
+  );
   const [difficultyPreset, setDifficultyPreset] =
     useState<QuizDifficultyPreset>("mixed");
 
@@ -168,43 +189,6 @@ export default function Home() {
               aria-hidden
             />
 
-            <div className="relative mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block text-left text-xs font-medium text-zinc-400">
-                Soru sayısı
-                <select
-                  value={questionCount}
-                  onChange={(e) => setQuestionCount(Number(e.target.value))}
-                  disabled={isLoading}
-                  className="mt-1.5 w-full rounded-lg border border-zinc-700/90 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-amber-400/50 disabled:opacity-50"
-                >
-                  {Array.from(
-                    { length: QUIZ_QUESTION_COUNT_MAX - QUIZ_QUESTION_COUNT_MIN + 1 },
-                    (_, i) => QUIZ_QUESTION_COUNT_MIN + i,
-                  ).map((n) => (
-                    <option key={n} value={n}>
-                      {n} soru
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-left text-xs font-medium text-zinc-400">
-                Zorluk
-                <select
-                  value={difficultyPreset}
-                  onChange={(e) =>
-                    setDifficultyPreset(e.target.value as QuizDifficultyPreset)
-                  }
-                  disabled={isLoading}
-                  className="mt-1.5 w-full rounded-lg border border-zinc-700/90 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-amber-400/50 disabled:opacity-50"
-                >
-                  <option value="mixed">Karışık (kolay / orta / zor)</option>
-                  <option value="easy">Kolay</option>
-                  <option value="medium">Orta</option>
-                  <option value="hard">Zor</option>
-                </select>
-              </label>
-            </div>
-
             <PdfUploadDropzone
               onFileSelect={setSelectedFile}
               disabled={isLoading}
@@ -238,6 +222,74 @@ export default function Home() {
                 {errorMessage}
               </div>
             )}
+
+            <div className="relative mt-7 border-t border-white/[0.08] pt-6">
+              <div className="mb-5 flex items-center justify-center gap-3">
+                <span className="h-px flex-1 max-w-[4rem] bg-gradient-to-r from-transparent to-amber-400/50" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-amber-200/80">
+                  Quiz vibe
+                </span>
+                <span className="h-px flex-1 max-w-[4rem] bg-gradient-to-l from-transparent to-violet-400/50" />
+              </div>
+
+              <p className="mb-2.5 text-center text-[11px] font-semibold text-zinc-500">Kaç soru?</p>
+              <div className="flex justify-center gap-2 sm:gap-3">
+                {QUIZ_QUESTION_COUNT_CHOICES.map((n) => {
+                  const on = questionCount === n;
+                  const v = QUESTION_VIBE[n];
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={isLoading}
+                      aria-pressed={on}
+                      onClick={() => setQuestionCount(n)}
+                      className={`relative flex min-w-[5.25rem] flex-1 flex-col items-center rounded-2xl border px-2 py-3 transition sm:min-w-[6.5rem] sm:px-3 ${
+                        on
+                          ? "border-amber-400/60 bg-gradient-to-b from-amber-400/25 to-orange-500/10 shadow-[0_0_28px_-6px_rgba(251,191,36,0.45)] ring-1 ring-amber-300/30"
+                          : "border-zinc-700/60 bg-zinc-900/40 hover:border-zinc-500/50 hover:bg-zinc-900/70"
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                    >
+                      <span className="text-lg leading-none sm:text-xl" aria-hidden>
+                        {v.emoji}
+                      </span>
+                      <span className="mt-1.5 text-lg font-black tabular-nums text-white sm:text-xl">{n}</span>
+                      <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wide text-zinc-500 sm:text-[10px]">
+                        {v.line}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="mb-2.5 mt-7 text-center text-[11px] font-semibold text-zinc-500">Zorluk vibe</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2.5">
+                {(Object.keys(DIFFICULTY_VIBE) as QuizDifficultyPreset[]).map((key) => {
+                  const on = difficultyPreset === key;
+                  const d = DIFFICULTY_VIBE[key];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={isLoading}
+                      aria-pressed={on}
+                      onClick={() => setDifficultyPreset(key)}
+                      className={`rounded-2xl border px-2 py-3 text-center transition sm:py-3.5 ${
+                        on
+                          ? "border-violet-400/55 bg-gradient-to-br from-violet-500/25 via-fuchsia-500/10 to-transparent shadow-[0_0_24px_-8px_rgba(167,139,250,0.5)] ring-1 ring-violet-300/25"
+                          : "border-zinc-700/60 bg-zinc-900/35 hover:border-zinc-500/45 hover:bg-zinc-900/60"
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                    >
+                      <span className="text-base sm:text-lg" aria-hidden>
+                        {d.emoji}
+                      </span>
+                      <p className="mt-1 text-xs font-bold text-zinc-100 sm:text-sm">{d.short}</p>
+                      <p className="mt-0.5 text-[9px] leading-tight text-zinc-500 sm:text-[10px]">{d.line}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
