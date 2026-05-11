@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import questionData from "@/data/questions.json";
+import { downloadQuizPdf } from "@/lib/client/downloadQuizPdf";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -352,6 +353,33 @@ export default function QuizPage() {
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300">{resultMessage}</p>
                 <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const points100 =
+                        filteredQuestions.length > 0
+                          ? Math.round((score / filteredQuestions.length) * CLASSIC_SCORE_MAX)
+                          : 0;
+                      downloadQuizPdf({
+                        title: `Klasik Quiz — ${selectedCategory ?? "Tüm kategoriler"}`,
+                        questions: filteredQuestions.map((q) => ({
+                          question: q.prompt,
+                          options: q.choices,
+                          correctAnswerIndex: q.answerIndex,
+                          difficulty: q.difficulty,
+                        })),
+                        result: {
+                          correctCount: score,
+                          questionCount: filteredQuestions.length,
+                          points: points100,
+                          maxPoints: CLASSIC_SCORE_MAX,
+                        },
+                      });
+                    }}
+                    className="rounded-xl border border-rose-400/30 bg-rose-500/15 px-5 py-3 text-sm font-semibold text-rose-50 transition duration-300 hover:border-rose-300/50 hover:bg-rose-500/25"
+                  >
+                    Sonucu indir (PDF)
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

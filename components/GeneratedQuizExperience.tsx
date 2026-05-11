@@ -7,6 +7,7 @@ import {
   encodeSharePayloadSync,
   type ShareQuizPayloadV1,
 } from "@/lib/shareQuizPayload";
+import { downloadQuizPdf } from "@/lib/client/downloadQuizPdf";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -184,6 +185,44 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setUserAnswers(Array.from({ length: total }, () => null));
   };
 
+  const handleDownloadQuestionsPdf = useCallback(() => {
+    downloadQuizPdf({
+      title: "Quiz Soruları",
+      questions: questions.map((q) => ({
+        question: q.question,
+        options: [...q.options],
+        correctAnswerIndex: q.correctAnswerIndex,
+        difficulty: q.difficulty,
+        explanation: q.explanation,
+      })),
+    });
+  }, [questions]);
+
+  const handleDownloadAttemptPdf = useCallback(() => {
+    if (!roundDone) return;
+    downloadQuizPdf({
+      title: "Quiz Sonucu",
+      questions: questions.map((q) => ({
+        question: q.question,
+        options: [...q.options],
+        correctAnswerIndex: q.correctAnswerIndex,
+        difficulty: q.difficulty,
+        explanation: q.explanation,
+      })),
+      result: {
+        correctCount: roundDone.score,
+        questionCount: roundDone.total,
+        points: roundDone.points,
+        maxPoints: roundDone.maxPoints,
+      },
+      userAnswers: userAnswers.map((a, i) => ({
+        questionIndex: i,
+        selectedOptionIndex: a,
+        correct: a === questions[i]?.correctAnswerIndex,
+      })),
+    });
+  }, [questions, roundDone, userAnswers]);
+
   const handleDownloadQuestionsJson = useCallback(() => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -309,6 +348,13 @@ export default function GeneratedQuizExperience({ questions }: Props) {
               >
                 <span className="relative z-10">Quizi başlat</span>
                 <span className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-white/15 to-cyan-400/0 opacity-0 transition duration-500 group-hover:opacity-100" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadQuestionsPdf}
+                className="rounded-2xl border border-white/[0.14] bg-white/[0.06] px-5 py-3 text-sm font-semibold text-zinc-100 shadow-inner transition duration-300 hover:border-rose-400/35 hover:bg-rose-500/10 hover:text-rose-50"
+              >
+                Quiz&apos;i indir (PDF)
               </button>
               <button
                 type="button"
@@ -516,6 +562,13 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                 className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 shadow-lg transition duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
               >
                 Tekrar çöz
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadAttemptPdf}
+                className="rounded-xl border border-rose-400/35 bg-rose-500/15 px-5 py-2.5 text-sm font-semibold text-rose-100 transition duration-300 hover:border-rose-300/50 hover:bg-rose-500/25"
+              >
+                Sonucu indir (PDF)
               </button>
               <button
                 type="button"
