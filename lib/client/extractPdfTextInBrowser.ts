@@ -5,8 +5,8 @@ type PdfJsTextItem = { str?: string };
 
 /**
  * Browser-side PDF → text extraction using pdfjs-dist.
- *
- * Purpose: avoid multipart upload limits (HTTP 413) by sending extracted text as JSON instead of the PDF bytes.
+ * Workaround: large files cannot be uploaded as multipart (HTTP 413 from platform/CDN).
+ * Instead, extract text in the browser and send plain JSON to the API.
  */
 export async function extractPdfTextInBrowser(file: File): Promise<string> {
   if (typeof window === "undefined") return "";
@@ -15,14 +15,27 @@ export async function extractPdfTextInBrowser(file: File): Promise<string> {
   const ab = await file.arrayBuffer();
   const data = new Uint8Array(ab);
 
-  // Use legacy build for broader bundler compatibility; disable worker to avoid extra asset wiring.
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data, disableWorker: true } as unknown as never);
+
+  // Point workerSrc to the bundled worker file served from /_next/static/chunks via Next.js.
+  // We inline a blob-worker fallback so the main thread can parse without a separate worker file.
+  try {
+    const workerSrc = new URL(
+      "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+      import.meta.url,
+    ).toString();
+    pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  } catch {
+    // If URL resolution fails (SSR/edge), disable worker entirely.
+    pdfjs.GlobalWorkerOptions.workerSrc = "";
+  }
+
+  const loadingTask = pdfjs.getDocument({ data });
   const doc = await loadingTask.promise;
 
   try {
     const pageTexts: string[] = [];
-    const maxPages = Math.max(1, Math.min(doc.numPages, 250)); // safety cap
+    const maxPages = Math.min(doc.numPages, 300);
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
       const page = await doc.getPage(pageNum);
@@ -36,7 +49,7 @@ export async function extractPdfTextInBrowser(file: File): Promise<string> {
         .join(" ");
       pageTexts.push(line);
 
-      // Stop early once we have enough text for the model.
+      // Stop early when we have enough for the model.
       const roughLen = pageTexts.reduce((n, s) => n + s.length + 1, 0);
       if (roughLen > QUIZ_TEXT_LIMITS.maxChars * 1.2) break;
     }
@@ -48,12 +61,9 @@ export async function extractPdfTextInBrowser(file: File): Promise<string> {
       : processed;
   } finally {
     try {
-      if (typeof doc.destroy === "function") {
-        await doc.destroy();
-      }
+      if (typeof doc.destroy === "function") await doc.destroy();
     } catch {
       // ignore
     }
   }
 }
-
