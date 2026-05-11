@@ -25,9 +25,17 @@ export function parseQuizGenerateResponse(
   res: Response,
   raw: string,
 ): { ok: true; questions: QuizQuestionPayload[] } | { ok: false; message: string } {
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+  if (!trimmed) {
+    if (!res.ok) {
+      return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_BAD_RESPONSE) };
+    }
+    return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_JSON_PARSE) };
+  }
+
   let data: ApiJson;
   try {
-    data = raw ? (JSON.parse(raw) as ApiJson) : {};
+    data = JSON.parse(trimmed) as ApiJson;
   } catch {
     return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_JSON_PARSE) };
   }

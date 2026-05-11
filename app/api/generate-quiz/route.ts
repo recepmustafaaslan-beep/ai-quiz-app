@@ -11,6 +11,7 @@ import {
 } from "@/lib/quizErrors";
 import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
 import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ type QuizQuestion = {
   options: [string, string, string, string];
   correctAnswerIndex: 0 | 1 | 2 | 3;
   difficulty: Difficulty;
-  /** Doğru cevabın gerekçesi; yanlış / süre dolduğunda gösterilir */
+  /** Doğru cevabın gerekçesi; yanlışta gösterilir */
   explanation: string;
 };
 
@@ -48,76 +49,125 @@ function statusForOpenAIError(code: QuizErrorCodeType): number {
 }
 
 async function resolvePdfTextFromRequest(req: Request): Promise<
-  { ok: true; pdfText: string } | { ok: false; response: ReturnType<typeof jsonError> }
+  { ok: true; pdfText: string } | { ok: false; response: Response }
 > {
   const ct = req.headers.get("content-type") ?? "";
 
-  if (ct.includes("multipart/form-data")) {
-    const formData = await req.formData();
-    const file = formData.get("file");
-    if (!file || typeof file === "string") {
+  try {
+    if (ct.includes("multipart/form-data")) {
+      let formData: FormData;
+      try {
+        formData = await req.formData();
+      } catch (e) {
+        console.error("[generate-quiz] formData parse failed", e);
+        return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
+      }
+
+      const file = formData.get("file");
+      const fileExists = file != null && !(typeof file === "string" && file.length === 0);
+      const fileSize = typeof file === "object" && file && "size" in file ? (file as File).size : undefined;
+      const fileType =
+        typeof file === "object" && file && "type" in file ? String((file as File).type || "") : undefined;
+      console.log("[generate-quiz] multipart file", {
+        exists: fileExists,
+        fieldKind: typeof file,
+        size: fileSize,
+        type: fileType,
+      });
+
+      if (!file) {
+        return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
+      }
+      if (typeof file === "string") {
+        return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
+      }
+
+      const pdfFile = file as File;
+
+      if (pdfFile.size === 0) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+      }
+      if (pdfFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_TOO_LARGE, 400) };
+      }
+      const name = pdfFile.name?.toLowerCase() ?? "";
+      const type = pdfFile.type;
+      if (type && type !== "application/pdf" && !name.endsWith(".pdf")) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_INVALID, 400) };
+      }
+
+      const read = await readUploadFileBuffer(pdfFile);
+      if (!read.ok) {
+        console.warn("[generate-quiz] file buffer read failed", read.reason);
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+      }
+      const buffer = read.buffer;
+
+      let raw: string;
+      try {
+        raw = await extractPdfTextWithPdfParse(buffer);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        const code = isLikelyInvalidPdfError(msg) ? QuizErrorCode.PDF_INVALID : QuizErrorCode.PDF_READ_FAILED;
+        return { ok: false, response: jsonError(code, 400) };
+      }
+
+      if (!raw) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+      }
+
+      const text = preprocessPdfText(raw);
+      if (!text || text.trim().length === 0) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
+      }
+
+      console.log("[generate-quiz] extractedPdfTextLength", text.length);
+
+      if (text.length < QUIZ_TEXT_LIMITS.minChars) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_TEXT_TOO_SHORT, 400) };
+      }
+      if (text.length > QUIZ_TEXT_LIMITS.maxChars) {
+        return { ok: false, response: jsonError(QuizErrorCode.QUIZ_TEXT_TOO_LONG, 400) };
+      }
+
+      return { ok: true, pdfText: text };
+    }
+
+    let body: { pdfText?: string };
+    try {
+      body = (await req.json()) as { pdfText?: string };
+    } catch (e) {
+      console.error("[generate-quiz] JSON body parse failed", e);
       return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
     }
-    const pdfFile = file as File;
-    if (pdfFile.size === 0) {
-      return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
-    }
-    if (pdfFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {
-      return { ok: false, response: jsonError(QuizErrorCode.PDF_TOO_LARGE, 400) };
-    }
-    const name = pdfFile.name?.toLowerCase() ?? "";
-    const type = pdfFile.type;
-    if (type && type !== "application/pdf" && !name.endsWith(".pdf")) {
-      return { ok: false, response: jsonError(QuizErrorCode.PDF_INVALID, 400) };
-    }
 
-    const buffer = Buffer.from(await pdfFile.arrayBuffer());
-    let raw: string;
-    try {
-      raw = await extractPdfTextWithPdfParse(buffer);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      const code = isLikelyInvalidPdfError(msg) ? QuizErrorCode.PDF_INVALID : QuizErrorCode.PDF_READ_FAILED;
-      return { ok: false, response: jsonError(code, 400) };
-    }
-
-    if (!raw) {
-      return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
-    }
-
-    const processed = preprocessPdfText(raw);
-    if (!processed.trim()) {
+    const text = typeof body?.pdfText === "string" ? body.pdfText.trim() : "";
+    if (!text || text.trim().length === 0) {
       return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
     }
 
-    if (processed.length < QUIZ_TEXT_LIMITS.minChars) {
+    console.log("[generate-quiz] extractedPdfTextLength", text.length);
+
+    if (text.length < QUIZ_TEXT_LIMITS.minChars) {
       return { ok: false, response: jsonError(QuizErrorCode.PDF_TEXT_TOO_SHORT, 400) };
     }
-    if (processed.length > QUIZ_TEXT_LIMITS.maxChars) {
+    if (text.length > QUIZ_TEXT_LIMITS.maxChars) {
       return { ok: false, response: jsonError(QuizErrorCode.QUIZ_TEXT_TOO_LONG, 400) };
     }
-
-    return { ok: true, pdfText: processed };
+    return { ok: true, pdfText: text };
+  } catch (error) {
+    console.error("[generate-quiz] resolvePdfTextFromRequest unexpected", error);
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          code: QuizErrorCode.PDF_READ_FAILED,
+          error: getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED),
+        },
+        { status: 400 },
+      ),
+    };
   }
-
-  let body: { pdfText?: string };
-  try {
-    body = (await req.json()) as { pdfText?: string };
-  } catch {
-    return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
-  }
-
-  const pdfText = typeof body?.pdfText === "string" ? body.pdfText.trim() : "";
-  if (!pdfText) {
-    return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
-  }
-  if (pdfText.length < QUIZ_TEXT_LIMITS.minChars) {
-    return { ok: false, response: jsonError(QuizErrorCode.PDF_TEXT_TOO_SHORT, 400) };
-  }
-  if (pdfText.length > QUIZ_TEXT_LIMITS.maxChars) {
-    return { ok: false, response: jsonError(QuizErrorCode.QUIZ_TEXT_TOO_LONG, 400) };
-  }
-  return { ok: true, pdfText };
 }
 
 export async function POST(req: Request) {
@@ -149,7 +199,7 @@ Pedagoji ve kalite kuralları:
 - Her soruda tam 4 seçenek olsun; tek doğru cevap olsun; seçenekler birbirine anlamca yakın "tuzak" ama akademik olarak tutarlı olsun.
 - Doğru cevabın konumu (correctAnswerIndex) 0,1,2,3 arasında mümkün olduğunca dengeli dağılsın (örneğin her indekse yakın sayıda).
 - Soru kökleri net, seçenekler dilbilgisi olarak paralel yapıda olsun.
-- Her soru için "explanation" alanı zorunlu: akademik Türkçe, 2–4 cümle; doğru seçeneğin ders metnine dayalı kısa gerekçesini yaz. Yanlış cevap veya süre bitince öğrenciye gösterilecek; doğru şıkkı savunur nitelikte olsun, diğer şıkları tek tek eleştirme.
+- Her soru için "explanation" alanı zorunlu: akademik Türkçe, 2–4 cümle; doğru seçeneğin ders metnine dayalı kısa gerekçesini yaz. Yanlış cevapta öğrenciye gösterilecek; doğru şıkkı savunur nitelikte olsun, diğer şıkları tek tek eleştirme.
 
 Çıktı biçimi:
 - Yalnızca geçerli JSON dön; markdown, kod bloğu veya açıklama metni ekleme.
@@ -279,7 +329,14 @@ Kurallar:
 
   return NextResponse.json({ questions: sanitizedQuestions });
   } catch (error) {
-    console.error("[generate-quiz]", error);
-    return jsonError(QuizErrorCode.OPENAI_UNKNOWN, 500);
+    console.error("[generate-quiz] POST unhandled", error);
+
+    return NextResponse.json(
+      {
+        code: QuizErrorCode.OPENAI_UNKNOWN,
+        error: getQuizUserMessage(QuizErrorCode.OPENAI_UNKNOWN),
+      },
+      { status: 500 },
+    );
   }
 }

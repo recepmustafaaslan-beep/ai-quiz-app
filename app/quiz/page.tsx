@@ -31,11 +31,6 @@ const difficultyLabel: Record<Difficulty, string> = {
   medium: "Orta",
   hard: "Zor",
 };
-const difficultySeconds: Record<Difficulty, number> = {
-  easy: 20,
-  medium: 15,
-  hard: 10,
-};
 
 export default function QuizPage() {
   const [started, setStarted] = useState(false);
@@ -45,7 +40,6 @@ export default function QuizPage() {
   const [score, setScore] = useState(0);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [answerStatus, setAnswerStatus] = useState<"idle" | "correct" | "wrong">("idle");
-  const [timeLeft, setTimeLeft] = useState(15);
   const [scoreHistory, setScoreHistory] = useState<SavedScore[]>([]);
 
   const categories = useMemo(
@@ -62,7 +56,6 @@ export default function QuizPage() {
     if (!selectedDifficulty) return categoryQuestions;
     return categoryQuestions.filter((question) => question.difficulty === selectedDifficulty);
   }, [categoryQuestions, selectedDifficulty]);
-  const currentTimerSeconds = selectedDifficulty ? difficultySeconds[selectedDifficulty] : 15;
 
   const currentQuestion = filteredQuestions[currentIndex];
   const isLastQuestion = currentIndex === filteredQuestions.length - 1;
@@ -111,36 +104,7 @@ export default function QuizPage() {
     setCurrentIndex((prev) => prev + 1);
     setSelectedChoice(null);
     setAnswerStatus("idle");
-    setTimeLeft(currentTimerSeconds);
   };
-
-  useEffect(() => {
-    if (!started || isFinished || answerStatus !== "idle") return;
-    if (timeLeft <= 0) return;
-
-    const timer = window.setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [started, isFinished, answerStatus, timeLeft]);
-
-  useEffect(() => {
-    if (!started || isFinished || answerStatus !== "idle") return;
-    if (timeLeft > 0) return;
-
-    setAnswerStatus("wrong");
-    setSelectedChoice(null);
-
-    const timeout = window.setTimeout(() => {
-      if (isLastQuestion) {
-        saveScore(score);
-      }
-      moveToNextQuestion();
-    }, 900);
-
-    return () => window.clearTimeout(timeout);
-  }, [timeLeft, started, isFinished, answerStatus, isLastQuestion, score]);
 
   const startQuiz = () => {
     if (!selectedCategory || !selectedDifficulty) return;
@@ -149,7 +113,6 @@ export default function QuizPage() {
     setScore(0);
     setSelectedChoice(null);
     setAnswerStatus("idle");
-    setTimeLeft(difficultySeconds[selectedDifficulty]);
   };
 
   const submitAnswer = () => {
@@ -217,7 +180,7 @@ export default function QuizPage() {
             </span>
           </h1>
           <p className="mx-auto mt-3 max-w-md text-pretty text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Kategori ve zorluk seç, süreyi yen, skorunu kaydet.
+            Kategori ve zorluk seç, cevapla ve skorunu kaydet.
           </p>
         </div>
 
@@ -289,21 +252,7 @@ export default function QuizPage() {
                     Skor: {score}
                   </span>
                 </div>
-                <div className="mb-2 h-2 w-full overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.06]">
-                  <div
-                    className={`h-full rounded-full transition-[width] duration-500 ease-out ${
-                      timeLeft <= 5
-                        ? "bg-gradient-to-r from-rose-500 to-orange-400 shadow-[0_0_16px_rgba(244,63,94,0.45)]"
-                        : "bg-gradient-to-r from-cyan-400 to-indigo-500 shadow-[0_0_12px_rgba(34,211,238,0.35)]"
-                    }`}
-                    style={{ width: `${(timeLeft / currentTimerSeconds) * 100}%` }}
-                  />
-                </div>
-                <p className="mb-6 text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Kalan süre: <span className="text-zinc-200">{timeLeft}s</span>
-                </p>
-
-                <h2 className="text-balance text-lg font-semibold leading-snug tracking-tight text-white sm:text-xl">
+                <h2 className="mb-6 text-balance text-lg font-semibold leading-snug tracking-tight text-white sm:text-xl">
                   {currentQuestion.prompt}
                 </h2>
 
@@ -387,7 +336,6 @@ export default function QuizPage() {
                     setCurrentIndex(0);
                     setSelectedChoice(null);
                     setAnswerStatus("idle");
-                    setTimeLeft(currentTimerSeconds);
                   }}
                   className="mt-6 rounded-xl border border-white/15 bg-white/[0.08] px-5 py-3 text-sm font-semibold text-white transition duration-300 hover:border-white/25 hover:bg-white/[0.12]"
                 >

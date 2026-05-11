@@ -14,14 +14,8 @@ export type GeneratedQuestion = {
   options: [string, string, string, string];
   correctAnswerIndex: 0 | 1 | 2 | 3;
   difficulty: Difficulty;
-  /** Doğru cevap gerekçesi; yanlış veya süre bitince gösterilir */
+  /** Doğru cevap gerekçesi; yanlışta gösterilir */
   explanation: string;
-};
-
-const difficultySeconds: Record<Difficulty, number> = {
-  easy: 25,
-  medium: 18,
-  hard: 12,
 };
 
 const difficultyLabelTr: Record<Difficulty, string> = {
@@ -50,7 +44,6 @@ export default function GeneratedQuizExperience({ questions }: Props) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answerPhase, setAnswerPhase] = useState<"idle" | "answered">("idle");
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState(0);
   const [roundDone, setRoundDone] = useState<{
@@ -70,7 +63,6 @@ export default function GeneratedQuizExperience({ questions }: Props) {
   );
 
   const currentQuestion = questions[currentIdx];
-  const currentSeconds = currentQuestion ? difficultySeconds[currentQuestion.difficulty] : 0;
   const isLast = total > 0 && currentIdx === total - 1;
 
   const overallProgress = useMemo(() => {
@@ -146,30 +138,11 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setCurrentIdx(0);
     setAnswerPhase("idle");
     setPickedIndex(null);
-    setTimeLeft(0);
     setScore(0);
     setPoints(0);
     setRoundDone(null);
     pointsRef.current = 0;
   }, [questions]);
-
-  useEffect(() => {
-    if (!playMode || answerPhase !== "idle" || total === 0) return;
-    if (timeLeft <= 0) return;
-
-    const id = window.setInterval(() => {
-      setTimeLeft((t) => t - 1);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [playMode, answerPhase, timeLeft, total]);
-
-  useEffect(() => {
-    if (!playMode || answerPhase !== "idle" || total === 0) return;
-    if (timeLeft > 0) return;
-
-    setAnswerPhase("answered");
-    setPickedIndex(null);
-  }, [timeLeft, playMode, answerPhase, total]);
 
   const startPlayMode = () => {
     if (total === 0) return;
@@ -182,7 +155,6 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setPoints(0);
     scoreRef.current = 0;
     pointsRef.current = 0;
-    setTimeLeft(difficultySeconds[questions[0].difficulty]);
   };
 
   const pickOption = (index: number) => {
@@ -218,14 +190,12 @@ export default function GeneratedQuizExperience({ questions }: Props) {
       setCurrentIdx(0);
       setAnswerPhase("idle");
       setPickedIndex(null);
-      setTimeLeft(0);
       return;
     }
     const next = currentIdx + 1;
     setCurrentIdx(next);
     setAnswerPhase("idle");
     setPickedIndex(null);
-    setTimeLeft(difficultySeconds[questions[next].difficulty]);
   };
 
   if (total === 0) return null;
@@ -323,26 +293,6 @@ export default function GeneratedQuizExperience({ questions }: Props) {
             <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-200">
               {difficultyLabelTr[currentQuestion.difficulty]}
             </span>
-            <span
-              className={`rounded-full border border-white/[0.06] px-3.5 py-1.5 font-mono text-xs font-semibold tabular-nums transition duration-300 ${
-                timeLeft <= 3
-                  ? "animate-pulse border-rose-500/30 bg-rose-500/15 text-rose-200"
-                  : "bg-white/[0.04] text-cyan-200/95"
-              }`}
-            >
-              {timeLeft}s
-            </span>
-          </div>
-
-          <div className="relative mt-5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-900 ring-1 ring-white/[0.04]">
-            <div
-              className={`h-full rounded-full transition-all duration-1000 ease-linear ${
-                timeLeft <= 3 ? "bg-gradient-to-r from-rose-500 to-orange-400" : "bg-gradient-to-r from-cyan-500 to-indigo-500"
-              }`}
-              style={{
-                width: `${Math.max(0, Math.min(100, (timeLeft / currentSeconds) * 100))}%`,
-              }}
-            />
           </div>
 
           <h3 className="relative mt-8 text-lg font-medium leading-snug tracking-tight text-white sm:text-xl">
@@ -404,25 +354,22 @@ export default function GeneratedQuizExperience({ questions }: Props) {
             })}
           </ul>
 
-          {answerPhase === "answered" && (
+          {answerPhase === "answered" && pickedIndex !== null && (
             <div className="animate-quiz-card mt-6">
-              {pickedIndex === null ? (
-                <p className="text-sm font-medium text-amber-200">Süre bitti. Bu soru yanlış sayıldı.</p>
-              ) : pickedIndex === currentQuestion.correctAnswerIndex ? (
+              {pickedIndex === currentQuestion.correctAnswerIndex ? (
                 <p className="text-sm font-semibold text-emerald-300">Harika, doğru cevap!</p>
               ) : (
                 <p className="text-sm font-semibold text-rose-300">Yanlış cevap.</p>
               )}
-              {(pickedIndex === null || pickedIndex !== currentQuestion.correctAnswerIndex) &&
-                currentQuestion.explanation && (
-                  <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-left">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/90">
-                      Neden doğru cevap bu?
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-200/95">{currentQuestion.explanation}</p>
-                  </div>
-                )}
-              {(pickedIndex === null || pickedIndex !== currentQuestion.correctAnswerIndex) && (
+              {pickedIndex !== currentQuestion.correctAnswerIndex && currentQuestion.explanation && (
+                <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-left">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/90">
+                    Neden doğru cevap bu?
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-200/95">{currentQuestion.explanation}</p>
+                </div>
+              )}
+              {pickedIndex !== currentQuestion.correctAnswerIndex && (
                 <p className="mt-3 text-sm text-slate-400">
                   Doğru şık:{" "}
                   <span className="font-semibold text-emerald-300">
