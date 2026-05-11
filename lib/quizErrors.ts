@@ -35,7 +35,7 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
   [QuizErrorCode.PDF_INVALID]:
     "Bu dosya geçerli bir PDF olarak açılamadı. Dosyanın bozuk olmadığından ve şifre korumasız olduğundan emin olun.",
   [QuizErrorCode.PDF_EMPTY]:
-    "PDF içinden metin çıkarılamadı (boş veya yalnızca görüntü olabilir). Metin içeren bir ders notu deneyin.",
+    "Bu PDF’de seçilebilir metin katmanı yok veya metin okunamadı (çoğunlukla taranmış/sadece görüntü dosyası). Word/Google Docs’tan dışa aktarılmış veya metin içeren bir PDF deneyin; taranmış notlar için önce OCR uygulayın.",
   [QuizErrorCode.PDF_TEXT_TOO_SHORT]:
     "Çıkarılan metin çok kısa; quiz üretmek için yeterli içerik yok. Daha zengin metinli bir PDF yükleyin.",
   [QuizErrorCode.PDF_READ_FAILED]:

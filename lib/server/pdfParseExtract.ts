@@ -1,4 +1,5 @@
 import { extractPdfTextWithPdfJs } from "@/lib/server/extractPdfTextPdfJs";
+import { getPdfJsServerAssetFields, PDFJS_PDF_PARSE_PEER_VERSION } from "@/lib/server/pdfJsServerAssets";
 import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
 
 /**
@@ -10,7 +11,10 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
   try {
     const { PDFParse } = await import("pdf-parse");
     const data = pdfBufferToUint8Array(buffer);
-    const parser = new PDFParse({ data });
+    const parser = new PDFParse({
+      data,
+      ...getPdfJsServerAssetFields(PDFJS_PDF_PARSE_PEER_VERSION, { disableFontFace: false }),
+    });
     try {
       const result = await parser.getText();
       fromParse = (result.text ?? "").trim();
