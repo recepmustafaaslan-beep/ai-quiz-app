@@ -13,6 +13,12 @@ import {
   QuizErrorCode,
   QUIZ_UPLOAD_LIMITS,
 } from "@/lib/quizErrors";
+import {
+  QUIZ_QUESTION_COUNT_DEFAULT,
+  QUIZ_QUESTION_COUNT_MAX,
+  QUIZ_QUESTION_COUNT_MIN,
+  type QuizDifficultyPreset,
+} from "@/lib/quizGenerationOptions";
 
 /** Ders notu / çalışma masası — Unsplash (ücretsiz kullanım) */
 const LANDING_BG =
@@ -25,6 +31,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
+  const [questionCount, setQuestionCount] = useState(QUIZ_QUESTION_COUNT_DEFAULT);
+  const [difficultyPreset, setDifficultyPreset] =
+    useState<QuizDifficultyPreset>("mixed");
 
   const canGenerate = useMemo(() => !!selectedFile && !isLoading, [selectedFile, isLoading]);
 
@@ -69,7 +78,10 @@ export default function Home() {
         return;
       }
 
-      const result = await requestGenerateQuizWithPdfFile(selectedFile);
+      const result = await requestGenerateQuizWithPdfFile(selectedFile, {
+        questionCount,
+        difficultyPreset,
+      });
       applyQuizApiResult(result);
     } catch {
       setErrorMessage(getQuizUserMessage(QuizErrorCode.CLIENT_UNEXPECTED));
@@ -156,10 +168,49 @@ export default function Home() {
               aria-hidden
             />
 
+            <div className="relative mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-left text-xs font-medium text-zinc-400">
+                Soru sayısı
+                <select
+                  value={questionCount}
+                  onChange={(e) => setQuestionCount(Number(e.target.value))}
+                  disabled={isLoading}
+                  className="mt-1.5 w-full rounded-lg border border-zinc-700/90 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-amber-400/50 disabled:opacity-50"
+                >
+                  {Array.from(
+                    { length: QUIZ_QUESTION_COUNT_MAX - QUIZ_QUESTION_COUNT_MIN + 1 },
+                    (_, i) => QUIZ_QUESTION_COUNT_MIN + i,
+                  ).map((n) => (
+                    <option key={n} value={n}>
+                      {n} soru
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-left text-xs font-medium text-zinc-400">
+                Zorluk
+                <select
+                  value={difficultyPreset}
+                  onChange={(e) =>
+                    setDifficultyPreset(e.target.value as QuizDifficultyPreset)
+                  }
+                  disabled={isLoading}
+                  className="mt-1.5 w-full rounded-lg border border-zinc-700/90 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-100 outline-none transition focus:border-amber-400/50 disabled:opacity-50"
+                >
+                  <option value="mixed">Karışık (kolay / orta / zor)</option>
+                  <option value="easy">Kolay</option>
+                  <option value="medium">Orta</option>
+                  <option value="hard">Zor</option>
+                </select>
+              </label>
+            </div>
+
             <PdfUploadDropzone
               onFileSelect={setSelectedFile}
               disabled={isLoading}
               minimal
+              questionCount={questionCount}
+              difficultyPreset={difficultyPreset}
               onGenerateQuizLoading={(loading) => {
                 setIsLoading(loading);
                 if (loading) {

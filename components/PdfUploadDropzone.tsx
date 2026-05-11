@@ -7,6 +7,10 @@ import {
   QuizErrorCode,
   QUIZ_UPLOAD_LIMITS,
 } from "@/lib/quizErrors";
+import {
+  QUIZ_QUESTION_COUNT_DEFAULT,
+  type QuizDifficultyPreset,
+} from "@/lib/quizGenerationOptions";
 import { requestGenerateQuizWithPdfFile, type QuizQuestionPayload } from "@/lib/quizClientRequest";
 
 type PdfUploadDropzoneProps = {
@@ -14,6 +18,9 @@ type PdfUploadDropzoneProps = {
   disabled?: boolean;
   /** Daha sade kenarlık ve tipografi (landing) */
   minimal?: boolean;
+  /** Quiz API ile aynı parametreler (buton ve otomatik üretim) */
+  questionCount?: number;
+  difficultyPreset?: QuizDifficultyPreset;
   onGenerateQuizLoading?: (loading: boolean) => void;
   onGenerateQuizResult?: (
     result: { ok: true; questions: QuizQuestionPayload[] } | { ok: false; message: string },
@@ -24,6 +31,8 @@ export default function PdfUploadDropzone({
   onFileSelect,
   disabled = false,
   minimal = false,
+  questionCount = QUIZ_QUESTION_COUNT_DEFAULT,
+  difficultyPreset = "mixed",
   onGenerateQuizLoading,
   onGenerateQuizResult,
 }: PdfUploadDropzoneProps) {
@@ -49,7 +58,10 @@ export default function PdfUploadDropzone({
       void (async () => {
         onGenerateQuizLoading?.(true);
         try {
-          const result = await requestGenerateQuizWithPdfFile(pickedFile);
+          const result = await requestGenerateQuizWithPdfFile(pickedFile, {
+            questionCount,
+            difficultyPreset,
+          });
           onGenerateQuizResult(result);
         } catch {
           onGenerateQuizResult({
@@ -61,7 +73,14 @@ export default function PdfUploadDropzone({
         }
       })();
     },
-    [disabled, onFileSelect, onGenerateQuizLoading, onGenerateQuizResult],
+    [
+      disabled,
+      difficultyPreset,
+      onFileSelect,
+      onGenerateQuizLoading,
+      onGenerateQuizResult,
+      questionCount,
+    ],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

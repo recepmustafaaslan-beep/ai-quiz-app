@@ -13,6 +13,17 @@ import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
 import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 import { bufferHasPdfSignature } from "@/lib/server/pdfSignature";
 import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
+import {
+  buildQuizSystemPrompt,
+  buildRepairSystemPrompt,
+  buildTargetDifficultyOrder,
+  countsMatchTarget,
+  parseDifficultyPreset,
+  parseQuestionCount,
+  rebalanceToTargets,
+  targetCountsForPreset,
+  type QuizDifficultyPreset,
+} from "@/lib/quizGenerationOptions";
 
 export const runtime = "nodejs";
 
@@ -99,37 +110,31 @@ function isDifficultyValue(d: unknown): d is Difficulty {
   return d === "easy" || d === "medium" || d === "hard";
 }
 
-/** Pedagoji hedefi: 2 kolay, 4 orta, 4 zor (sıra önemli değil; burada sabit sıra atanıyor). */
-const PEDAGOGY_DIFFICULTY_ORDER: Difficulty[] = [
-  "easy",
-  "easy",
-  "medium",
-  "medium",
-  "medium",
-  "medium",
-  "hard",
-  "hard",
-  "hard",
-  "hard",
-];
-
-function sanitizeQuizQuestionsFromParsed(parsed: QuizResponse): QuizQuestion[] {
+function sanitizeQuizQuestionsFromParsed(
+  parsed: QuizResponse,
+  limit: number,
+): QuizQuestion[] {
   const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
   const fallbackExplanation =
     "Bu soruda doğru cevap, ders metnindeki ilgili kavrama ve tanımlara en uygun seçenektir.";
 
   return questions
+    .map((q) => {
+      const idxRaw = (q as { correctAnswerIndex?: unknown }).correctAnswerIndex;
+      const idx = typeof idxRaw === "number" ? idxRaw : Number(idxRaw);
+      return { q, idx };
+    })
     .filter(
-      (q) =>
+      ({ q, idx }) =>
         typeof q?.question === "string" &&
         Array.isArray(q?.options) &&
         q.options.length === 4 &&
-        typeof q.correctAnswerIndex === "number" &&
-        [0, 1, 2, 3].includes(q.correctAnswerIndex) &&
+        Number.isInteger(idx) &&
+        [0, 1, 2, 3].includes(idx) &&
         isDifficultyValue(q.difficulty),
     )
-    .slice(0, 10)
-    .map((q) => {
+    .slice(0, limit)
+    .map(({ q, idx }) => {
       const rawEx =
         typeof (q as { explanation?: unknown }).explanation === "string"
           ? String((q as { explanation?: string }).explanation).trim()
@@ -142,46 +147,22 @@ function sanitizeQuizQuestionsFromParsed(parsed: QuizResponse): QuizQuestion[] {
           String(q.options[2]),
           String(q.options[3]),
         ] as [string, string, string, string],
-        correctAnswerIndex: q.correctAnswerIndex as 0 | 1 | 2 | 3,
+        correctAnswerIndex: idx as 0 | 1 | 2 | 3,
         difficulty: q.difficulty as Difficulty,
         explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
       };
     });
 }
 
-function pedagogyDistributionOk(qs: QuizQuestion[]): boolean {
-  if (qs.length !== 10) return false;
-  let easy = 0;
-  let medium = 0;
-  let hard = 0;
-  for (const q of qs) {
-    if (q.difficulty === "easy") easy++;
-    else if (q.difficulty === "medium") medium++;
-    else hard++;
-  }
-  return easy === 2 && medium === 4 && hard === 4;
-}
-
-function rebalancePedagogyDifficulties(qs: QuizQuestion[]): QuizQuestion[] {
-  return qs.slice(0, 10).map((q, i) => ({
-    ...q,
-    difficulty: PEDAGOGY_DIFFICULTY_ORDER[i] ?? q.difficulty,
-  }));
-}
-
 async function repairQuizResponseJson(
   client: OpenAI,
   model: string,
   broken: QuizResponse,
+  questionCount: number,
+  difficultyPreset: QuizDifficultyPreset,
   repairSignal: AbortSignal,
 ): Promise<QuizResponse | null> {
-  const sys = [
-    "Görev: Verilen quiz JSON şemasını düzelt.",
-    "Çıktı: yalnızca geçerli JSON; markdown veya açıklama metni yok.",
-    "Koşullar: tam 10 soru; her soruda question, options (4 string), correctAnswerIndex 0-3, difficulty, explanation.",
-    'Zorluk adetleri TAM: "easy" 2, "medium" 4, "hard" 4.',
-    "Eksik geçerli soru varsa ders içeriğine uygun üret; fazla veya geçersiz girdileri ele.",
-  ].join(" ");
+  const sys = buildRepairSystemPrompt(questionCount, difficultyPreset);
 
   let completion;
   try {
@@ -215,7 +196,13 @@ async function repairQuizResponseJson(
 }
 
 async function resolvePdfTextFromRequest(req: Request): Promise<
-  { ok: true; pdfText: string } | { ok: false; response: Response }
+  | {
+      ok: true;
+      pdfText: string;
+      questionCount: number;
+      difficultyPreset: QuizDifficultyPreset;
+    }
+  | { ok: false; response: Response }
 > {
   const ct = req.headers.get("content-type") ?? "";
 
@@ -228,6 +215,9 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
         console.error("[generate-quiz] formData parse failed", e);
         return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
       }
+
+      const questionCount = parseQuestionCount(formData.get("questionCount"));
+      const difficultyPreset = parseDifficultyPreset(formData.get("difficultyPreset"));
 
       const file = formData.get("file");
       const fileExists = file != null && !(typeof file === "string" && file.length === 0);
@@ -310,12 +300,16 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
         return { ok: false, response: jsonError(QuizErrorCode.QUIZ_TEXT_TOO_LONG, 400) };
       }
 
-      return { ok: true, pdfText: text };
+      return { ok: true, pdfText: text, questionCount, difficultyPreset };
     }
 
-    let body: { pdfText?: string };
+    let body: { pdfText?: string; questionCount?: unknown; difficultyPreset?: unknown };
     try {
-      body = (await req.json()) as { pdfText?: string };
+      body = (await req.json()) as {
+        pdfText?: string;
+        questionCount?: unknown;
+        difficultyPreset?: unknown;
+      };
     } catch (e) {
       console.error("[generate-quiz] JSON body parse failed", e);
       return { ok: false, response: jsonError(QuizErrorCode.BODY_INVALID, 400) };
@@ -334,7 +328,9 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
     if (text.length > QUIZ_TEXT_LIMITS.maxChars) {
       return { ok: false, response: jsonError(QuizErrorCode.QUIZ_TEXT_TOO_LONG, 400) };
     }
-    return { ok: true, pdfText: text };
+    const questionCount = parseQuestionCount(body?.questionCount);
+    const difficultyPreset = parseDifficultyPreset(body?.difficultyPreset);
+    return { ok: true, pdfText: text, questionCount, difficultyPreset };
   } catch (error) {
     console.error("[generate-quiz] resolvePdfTextFromRequest unexpected", error);
     return {
@@ -360,50 +356,10 @@ export async function POST(req: Request) {
   if (!resolved.ok) {
     return resolved.response;
   }
-  const { pdfText } = resolved;
-
-  const systemPrompt = `
-Rolün: Sen, yükseköğretimde uzman bir üniversite eğitmenisin.
-
-Görev: Sana ayrı bir kullanıcı mesajı olarak gönderilen ders notu metninden yüksek kaliteli çoktan seçmeli quiz soruları üretmek.
-
-Zorluk dağılımı (tam olarak uygula; sıra önemli değil):
-- 2 soru: difficulty "easy" (NOT: basit ezber veya tanım ezberi değil; göreceli olarak daha erişilebilir kavram sorusu)
-- 4 soru: difficulty "medium"
-- 4 soru: difficulty "hard"
-
-Pedagoji ve kalite kuralları:
-- Yalnızca metindeki önemli kavramlar, ilişkiler, gerekçe ve çıkarımlardan soru üret; önemsiz detaydan kaçın.
-- Ezber/tanım tekrarı sorma; anlama, yorumlama, karşılaştırma, uygulama ve analiz düzeyinde sor.
-- Sorular akademik Türkçe ile yazılsın; konuşma dili ve aşırı kısa başlık tarzı ifadeler kullanma.
-- Her soruda tam 4 seçenek olsun; tek doğru cevap olsun; seçenekler birbirine anlamca yakın "tuzak" ama akademik olarak tutarlı olsun.
-- Doğru cevabın konumu (correctAnswerIndex) 0,1,2,3 arasında mümkün olduğunca dengeli dağılsın (örneğin her indekse yakın sayıda).
-- Soru kökleri net, seçenekler dilbilgisi olarak paralel yapıda olsun.
-- Her soru için "explanation" alanı zorunlu: akademik Türkçe, 2–4 cümle; doğru seçeneğin ders metnine dayalı kısa gerekçesini yaz. Yanlış cevapta öğrenciye gösterilecek; doğru şıkkı savunur nitelikte olsun, diğer şıkları tek tek eleştirme.
-
-Çıktı biçimi:
-- Yalnızca geçerli JSON dön; markdown, kod bloğu veya açıklama metni ekleme.
-- Tam olarak 10 soru üret.
-
-JSON şablonu (birebir anahtarlar):
-{
-  "questions": [
-    {
-      "question": "string",
-      "options": ["string", "string", "string", "string"],
-      "correctAnswerIndex": 0,
-      "difficulty": "easy",
-      "explanation": "string"
-    }
-  ]
-}
-
-Kurallar:
-- correctAnswerIndex yalnızca 0, 1, 2 veya 3 olabilir.
-- difficulty yalnızca "easy", "medium" veya "hard" olabilir.
-- explanation her soruda anlamlı, boş olmayan bir metin olmalıdır.
-- Üretimden sonra kontrol edilecek: difficulty değerlerinden tam 2 tanesi "easy", tam 4 tanesi "medium", tam 4 tanesi "hard" olmalı (toplam 10 soru).
-`.trim();
+  const { pdfText, questionCount, difficultyPreset } = resolved;
+  const targetOrder = buildTargetDifficultyOrder(difficultyPreset, questionCount);
+  const targetCounts = targetCountsForPreset(difficultyPreset, questionCount);
+  const systemPrompt = buildQuizSystemPrompt(questionCount, difficultyPreset);
 
   let completion;
   try {
@@ -467,7 +423,7 @@ Kurallar:
 
   let sanitizedQuestions: QuizQuestion[];
   try {
-    sanitizedQuestions = sanitizeQuizQuestionsFromParsed(parsed);
+    sanitizedQuestions = sanitizeQuizQuestionsFromParsed(parsed, questionCount);
   } catch (sanitizeErr) {
     console.error("[generate-quiz] sanitize questions failed", sanitizeErr);
     return NextResponse.json(
@@ -479,17 +435,24 @@ Kurallar:
     );
   }
 
-  if (pedagogyDistributionOk(sanitizedQuestions)) {
+  if (
+    sanitizedQuestions.length === questionCount &&
+    countsMatchTarget(sanitizedQuestions, targetCounts)
+  ) {
     return NextResponse.json({ questions: sanitizedQuestions });
   }
 
-  if (sanitizedQuestions.length === 10) {
-    console.warn("[generate-quiz] model difficulty counts off; applying pedagogy rebalance", {
+  if (sanitizedQuestions.length === questionCount) {
+    console.warn("[generate-quiz] model difficulty counts off; applying target rebalance", {
       easy: sanitizedQuestions.filter((q) => q.difficulty === "easy").length,
       medium: sanitizedQuestions.filter((q) => q.difficulty === "medium").length,
       hard: sanitizedQuestions.filter((q) => q.difficulty === "hard").length,
+      questionCount,
+      difficultyPreset,
     });
-    return NextResponse.json({ questions: rebalancePedagogyDifficulties(sanitizedQuestions) });
+    return NextResponse.json({
+      questions: rebalanceToTargets(sanitizedQuestions, targetOrder),
+    });
   }
 
   if (sanitizedQuestions.length >= 1) {
@@ -499,16 +462,23 @@ Kurallar:
         getOpenAIClient(),
         QUIZ_MODEL,
         parsed,
+        questionCount,
+        difficultyPreset,
         AbortSignal.timeout(repairMs),
       );
       if (repaired) {
-        const second = sanitizeQuizQuestionsFromParsed(repaired);
-        if (pedagogyDistributionOk(second)) {
+        const second = sanitizeQuizQuestionsFromParsed(repaired, questionCount);
+        if (
+          second.length === questionCount &&
+          countsMatchTarget(second, targetCounts)
+        ) {
           return NextResponse.json({ questions: second });
         }
-        if (second.length === 10) {
+        if (second.length === questionCount) {
           console.warn("[generate-quiz] repair ok but counts off; rebalance");
-          return NextResponse.json({ questions: rebalancePedagogyDifficulties(second) });
+          return NextResponse.json({
+            questions: rebalanceToTargets(second, targetOrder),
+          });
         }
         sanitizedQuestions = second;
       }

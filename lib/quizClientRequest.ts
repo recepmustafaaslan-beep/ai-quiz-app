@@ -4,6 +4,7 @@ import {
   messageForHttpStatus,
   QuizErrorCode,
 } from "@/lib/quizErrors";
+import type { QuizDifficultyPreset } from "@/lib/quizGenerationOptions";
 
 const CLIENT_FETCH_TIMEOUT_MS = 120_000;
 
@@ -160,8 +161,16 @@ export type QuizGenerateClientResult =
   | { ok: true; questions: QuizQuestionPayload[] }
   | { ok: false; message: string };
 
+export type QuizGenerationRequestOptions = {
+  questionCount?: number;
+  difficultyPreset?: QuizDifficultyPreset;
+};
+
 /** PDF dosyası ile quiz üretir; zaman aşımı ve gövde okuma mobil için uyarlanmıştır */
-export async function requestGenerateQuizWithPdfFile(file: File): Promise<QuizGenerateClientResult> {
+export async function requestGenerateQuizWithPdfFile(
+  file: File,
+  options?: QuizGenerationRequestOptions,
+): Promise<QuizGenerateClientResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
 
@@ -170,6 +179,12 @@ export async function requestGenerateQuizWithPdfFile(file: File): Promise<QuizGe
     const safeName =
       typeof file.name === "string" && file.name.trim().length > 0 ? file.name.trim() : "document.pdf";
     formData.append("file", file, safeName);
+    if (options?.questionCount != null) {
+      formData.append("questionCount", String(options.questionCount));
+    }
+    if (options?.difficultyPreset != null) {
+      formData.append("difficultyPreset", options.difficultyPreset);
+    }
 
     const res = await fetch("/api/generate-quiz", {
       method: "POST",
@@ -267,6 +282,7 @@ export async function requestPdfTextExtract(
 
 export async function requestQuizGeneration(
   pdfText: string,
+  options?: QuizGenerationRequestOptions,
 ): Promise<{ ok: true; questions: QuizQuestionPayload[] } | { ok: false; message: string }> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
@@ -275,7 +291,11 @@ export async function requestQuizGeneration(
     const res = await fetch("/api/generate-quiz", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ pdfText }),
+      body: JSON.stringify({
+        pdfText,
+        ...(options?.questionCount != null ? { questionCount: options.questionCount } : {}),
+        ...(options?.difficultyPreset != null ? { difficultyPreset: options.difficultyPreset } : {}),
+      }),
       cache: "no-store",
       signal: controller.signal,
     });
