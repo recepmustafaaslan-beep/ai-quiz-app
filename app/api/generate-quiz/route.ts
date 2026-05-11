@@ -10,7 +10,6 @@ import {
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
 import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
-import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";
@@ -37,9 +36,11 @@ type QuizResponse = {
   questions: Array<QuizQuestion & { difficulty?: unknown }>;
 };
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAIClient(): OpenAI {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+const QUIZ_MODEL = process.env.OPENAI_QUIZ_MODEL?.trim() || "gpt-4o-mini";
 
 /** Üretimde maxDuration (60s) içinde kal; geliştirmede daha uzun model beklemesi için. */
 const OPENAI_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 120_000 : 50_000;
@@ -108,7 +109,18 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       }
       const buffer = read.buffer;
 
-      const pdfSig = bufferHasPdfSignature(buffer);
+      const pdfMod = await import("@/lib/server/pdfParseExtract").catch((e) => {
+        console.error("[generate-quiz] pdf module load failed", e);
+        return null;
+      });
+      if (!pdfMod) {
+        return {
+          ok: false,
+          response: jsonError(QuizErrorCode.PDF_READ_FAILED, 503),
+        };
+      }
+
+      const pdfSig = pdfMod.bufferHasPdfSignature(buffer);
       const mime = (type || "").toLowerCase();
       const clearlyWrongMedia =
         mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/");
@@ -121,7 +133,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
 
       let raw: string;
       try {
-        raw = await extractPdfTextWithPdfParse(buffer);
+        raw = await pdfMod.extractPdfTextWithPdfParse(buffer);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         const code = isLikelyInvalidPdfError(msg) ? QuizErrorCode.PDF_INVALID : QuizErrorCode.PDF_READ_FAILED;
@@ -243,10 +255,11 @@ Kurallar:
   let completion;
   try {
     const signal = AbortSignal.timeout(OPENAI_TIMEOUT_MS);
-    completion = await client.chat.completions.create(
+    completion = await getOpenAIClient().chat.completions.create(
       {
-        model: "gpt-4.1-mini",
+        model: QUIZ_MODEL,
         temperature: 0.35,
+        max_completion_tokens: 8192,
         messages: [
           {
             role: "system",
@@ -289,42 +302,54 @@ Kurallar:
     );
   }
 
-  const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
+  let sanitizedQuestions: QuizQuestion[];
+  try {
+    const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
 
-  const isDifficulty = (d: unknown): d is Difficulty =>
-    d === "easy" || d === "medium" || d === "hard";
+    const isDifficulty = (d: unknown): d is Difficulty =>
+      d === "easy" || d === "medium" || d === "hard";
 
-  const fallbackExplanation =
-    "Bu soruda doğru cevap, ders metnindeki ilgili kavrama ve tanımlara en uygun seçenektir.";
+    const fallbackExplanation =
+      "Bu soruda doğru cevap, ders metnindeki ilgili kavrama ve tanımlara en uygun seçenektir.";
 
-  const sanitizedQuestions: QuizQuestion[] = questions
-    .filter(
-      (q) =>
-        typeof q?.question === "string" &&
-        Array.isArray(q?.options) &&
-        q.options.length === 4 &&
-        [0, 1, 2, 3].includes(q.correctAnswerIndex) &&
-        isDifficulty(q.difficulty),
-    )
-    .slice(0, 10)
-    .map((q) => {
-      const rawEx =
-        typeof (q as { explanation?: unknown }).explanation === "string"
-          ? String((q as { explanation?: string }).explanation).trim()
-          : "";
-      return {
-        question: q.question,
-        options: [
-          String(q.options[0]),
-          String(q.options[1]),
-          String(q.options[2]),
-          String(q.options[3]),
-        ],
-        correctAnswerIndex: q.correctAnswerIndex as 0 | 1 | 2 | 3,
-        difficulty: q.difficulty as Difficulty,
-        explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
-      };
-    });
+    sanitizedQuestions = questions
+      .filter(
+        (q) =>
+          typeof q?.question === "string" &&
+          Array.isArray(q?.options) &&
+          q.options.length === 4 &&
+          [0, 1, 2, 3].includes(q.correctAnswerIndex) &&
+          isDifficulty(q.difficulty),
+      )
+      .slice(0, 10)
+      .map((q) => {
+        const rawEx =
+          typeof (q as { explanation?: unknown }).explanation === "string"
+            ? String((q as { explanation?: string }).explanation).trim()
+            : "";
+        return {
+          question: q.question,
+          options: [
+            String(q.options[0]),
+            String(q.options[1]),
+            String(q.options[2]),
+            String(q.options[3]),
+          ],
+          correctAnswerIndex: q.correctAnswerIndex as 0 | 1 | 2 | 3,
+          difficulty: q.difficulty as Difficulty,
+          explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
+        };
+      });
+  } catch (sanitizeErr) {
+    console.error("[generate-quiz] sanitize questions failed", sanitizeErr);
+    return NextResponse.json(
+      {
+        code: QuizErrorCode.MODEL_JSON_INVALID,
+        error: getQuizUserMessage(QuizErrorCode.MODEL_JSON_INVALID),
+      },
+      { status: 502 },
+    );
+  }
 
   const easyCount = sanitizedQuestions.filter((q) => q.difficulty === "easy").length;
   const mediumCount = sanitizedQuestions.filter((q) => q.difficulty === "medium").length;

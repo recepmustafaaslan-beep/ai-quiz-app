@@ -18,7 +18,7 @@ export type QuizQuestionPayload = {
 type ApiJson = {
   questions?: QuizQuestionPayload[];
   error?: string | { message?: string };
-  code?: string;
+  code?: string | number;
   message?: string;
   detail?: string;
 };
@@ -139,8 +139,10 @@ export function parseQuizGenerateResponse(
   }
 
   if (!res.ok) {
-    if (data.code && isQuizErrorCode(data.code)) {
-      return { ok: false, message: getQuizUserMessage(data.code) };
+    const codeRaw = data.code;
+    const codeStr = typeof codeRaw === "string" ? codeRaw : codeRaw != null ? String(codeRaw) : "";
+    if (codeStr && isQuizErrorCode(codeStr)) {
+      return { ok: false, message: getQuizUserMessage(codeStr) };
     }
     const extracted = extractApiErrorText(data);
     if (extracted) {
@@ -194,7 +196,7 @@ export async function requestGenerateQuizWithPdfFile(file: File): Promise<QuizGe
 type ExtractPdfJson = {
   text?: string;
   error?: string;
-  code?: string;
+  code?: string | number;
 };
 
 /** PDF → metin (sunucu `pdf-parse`, `/api/extract-pdf`) */
@@ -227,8 +229,11 @@ export async function requestPdfTextExtract(
     }
 
     if (!res.ok) {
-      if (data.code && isQuizErrorCode(data.code)) {
-        return { ok: false, message: getQuizUserMessage(data.code) };
+      const extCodeRaw = data.code;
+      const extCodeStr =
+        typeof extCodeRaw === "string" ? extCodeRaw : extCodeRaw != null ? String(extCodeRaw) : "";
+      if (extCodeStr && isQuizErrorCode(extCodeStr)) {
+        return { ok: false, message: getQuizUserMessage(extCodeStr) };
       }
       if (typeof data.error === "string" && data.error.trim()) {
         return { ok: false, message: data.error.trim() };
