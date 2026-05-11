@@ -31,6 +31,33 @@ export const QuizErrorCode = {
 
 export type QuizErrorCodeType = (typeof QuizErrorCode)[keyof typeof QuizErrorCode];
 
+/** Sunucu ve istemci tarafinda ayni esikler */
+export const QUIZ_TEXT_LIMITS = {
+  minChars: 80,
+  maxChars: 120_000,
+} as const;
+
+/**
+ * Upload limiti (istemci + sunucu aynı eşik).
+ *
+ * Not: Bazı barındırma katmanları (örn. bazı serverless/CDN kurulumları) multipart istek gövdesini daha düşük
+ * bir değerde (çoğunlukla ~4–5 MB) kesebilir ve 413 döndürebilir. Bu limit uygulama içi eşiğin üstünde olsa bile
+ * platform limitine takılabilirsiniz.
+ *
+ * Ayarlamak için:
+ * - NEXT_PUBLIC_QUIZ_MAX_FILE_MB=50  (istemci + sunucu)
+ */
+export const QUIZ_UPLOAD_LIMITS = {
+  maxFileBytes: (() => {
+    const raw = process.env.NEXT_PUBLIC_QUIZ_MAX_FILE_MB;
+    const mb = raw ? Number(raw) : 25;
+    const safeMb = Number.isFinite(mb) && mb > 0 ? mb : 25;
+    // Uç değerleri makul tut (tarayıcı belleği, base64 vb.)
+    const cappedMb = Math.min(Math.max(safeMb, 1), 200);
+    return Math.round(cappedMb * 1024 * 1024);
+  })(),
+} as const;
+
 const MESSAGES: Record<QuizErrorCodeType, string> = {
   [QuizErrorCode.PDF_INVALID]:
     "Bu dosya geçerli bir PDF olarak açılamadı. Dosyanın bozuk olmadığından ve şifre korumasız olduğundan emin olun.",
@@ -43,7 +70,9 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
   [QuizErrorCode.FILE_EMPTY]:
     "Seçilen dosya boş (0 bayt) veya okunamadı. Dosyayı yeniden kaydedip tekrar seçin veya başka bir PDF deneyin.",
   [QuizErrorCode.PDF_TOO_LARGE]:
-    "Dosya boyutu çok büyük. Barındırma (ör. Vercel) tek seferde yaklaşık 4 MB istek kabul eder; daha küçük veya sıkıştırılmış bir PDF deneyin.",
+    `Dosya boyutu çok büyük. Uygulama sınırı: ~${(QUIZ_UPLOAD_LIMITS.maxFileBytes / (1024 * 1024)).toFixed(
+      0,
+    )} MB. Daha küçük veya sıkıştırılmış bir PDF deneyin. (Not: Bazı barındırma katmanları daha düşük bir sınır koyabilir.)`,
   [QuizErrorCode.QUIZ_TEXT_TOO_LONG]:
     "Çıkarılan metin çok uzun. Daha kısa bir PDF veya tek ders notu bölümü yükleyin.",
   [QuizErrorCode.NETWORK]:
@@ -97,7 +126,7 @@ export function messageForHttpStatus(status: number): string {
     return "Ağ yanıtı tamamlanamadı (bağlantı kesildi veya engellendi). VPN / reklam engelleyiciyi kapatıp tekrar deneyin.";
   }
   if (status === 413) {
-    return "Yükleme boyutu sunucu sınırını aştı (çoğu ortamda ~4,5 MB). Daha küçük bir PDF seçin.";
+    return "Yükleme boyutu sunucu/platform sınırını aştı (bazı ortamlarda ~4–5 MB). Daha küçük bir PDF seçin veya uygulama/hosting limitlerini yükseltin.";
   }
   if (status === 504 || status === 502 || status === 503) {
     return "Sunucu zamanında yanıt veremedi veya geçici olarak kullanılamıyor. Bir süre sonra tekrar deneyin.";
@@ -119,17 +148,6 @@ export function messageForHttpStatus(status: number): string {
   }
   return `${MESSAGES[QuizErrorCode.API_BAD_RESPONSE]} (HTTP ${status})`;
 }
-
-/** Sunucu ve istemci tarafinda ayni esikler */
-export const QUIZ_TEXT_LIMITS = {
-  minChars: 80,
-  maxChars: 120_000,
-} as const;
-
-/** Vercel sunucusuz işlevler ~4,5 MB istek gövdesi sınırı koyar; üstü 413 veya bozuk yanıta düşer */
-export const QUIZ_UPLOAD_LIMITS = {
-  maxFileBytes: 4 * 1024 * 1024,
-} as const;
 
 /** pdf.js / tarayıcı hatalarından PDF_INVALID tahmini */
 export function isLikelyInvalidPdfError(message: string): boolean {
