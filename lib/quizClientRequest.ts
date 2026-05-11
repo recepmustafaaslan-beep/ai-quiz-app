@@ -1,6 +1,7 @@
 import {
   getQuizUserMessage,
   isQuizErrorCode,
+  messageForHttpStatus,
   QuizErrorCode,
 } from "@/lib/quizErrors";
 
@@ -16,8 +17,10 @@ export type QuizQuestionPayload = {
 
 type ApiJson = {
   questions?: QuizQuestionPayload[];
-  error?: string;
+  error?: string | { message?: string };
   code?: string;
+  message?: string;
+  detail?: string;
 };
 
 function stripBom(s: string): string {
@@ -28,14 +31,34 @@ function stripBom(s: string): string {
 }
 
 function looksLikeHtmlResponse(s: string): boolean {
-  const head = stripBom(s).trimStart().slice(0, 512).toLowerCase();
-  return (
+  const t = stripBom(s).trimStart();
+  if (t.startsWith("{") || t.startsWith("[")) return false;
+  const head = t.slice(0, 900).toLowerCase();
+  if (
     head.startsWith("<!doctype") ||
     head.startsWith("<html") ||
     head.startsWith("<head") ||
     head.startsWith("<body") ||
-    head.startsWith("<error")
-  );
+    head.startsWith("<error") ||
+    head.startsWith("<pre") ||
+    head.startsWith("<div") ||
+    head.includes("<meta ") ||
+    head.includes("chrome error") ||
+    head.includes("cloudflare")
+  ) {
+    return true;
+  }
+  return /internal server error|bad gateway|service unavailable|gateway time-out/i.test(head);
+}
+
+function parseApiJsonObject(candidate: string): ApiJson | null {
+  try {
+    const v = JSON.parse(candidate) as unknown;
+    if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+    return v as ApiJson;
+  } catch {
+    return null;
+  }
 }
 
 /** Mobil / proxy kaynaklı gürültülü gövdelerde JSON yakalamayı dener */
@@ -43,23 +66,16 @@ function tryParseApiJson(raw: string): ApiJson | null {
   const s = stripBom(raw).trim();
   if (!s) return null;
 
-  try {
-    return JSON.parse(s) as ApiJson;
-  } catch {
-    /* devam */
-  }
+  const direct = parseApiJsonObject(s);
+  if (direct) return direct;
 
   const fence = s.indexOf("```");
   if (fence >= 0) {
     let inner = s.slice(fence + 3).replace(/^\s*json\s*/i, "").trimStart();
     const close = inner.indexOf("```");
     if (close >= 0) {
-      const candidate = inner.slice(0, close).trim();
-      try {
-        return JSON.parse(candidate) as ApiJson;
-      } catch {
-        /* devam */
-      }
+      const fenced = parseApiJsonObject(inner.slice(0, close).trim());
+      if (fenced) return fenced;
     }
   }
 
@@ -67,14 +83,22 @@ function tryParseApiJson(raw: string): ApiJson | null {
     const start = s.indexOf("{");
     const end = s.lastIndexOf("}");
     if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(s.slice(start, end + 1)) as ApiJson;
-      } catch {
-        /* devam */
-      }
+      const sliced = parseApiJsonObject(s.slice(start, end + 1));
+      if (sliced) return sliced;
     }
   }
 
+  return null;
+}
+
+function extractApiErrorText(data: ApiJson): string | null {
+  const err = data.error;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  if (err && typeof err === "object" && typeof err.message === "string" && err.message.trim()) {
+    return err.message.trim();
+  }
+  if (typeof data.message === "string" && data.message.trim()) return data.message.trim();
+  if (typeof data.detail === "string" && data.detail.trim()) return data.detail.trim();
   return null;
 }
 
@@ -92,17 +116,25 @@ export function parseQuizGenerateResponse(
   const trimmed = typeof raw === "string" ? stripBom(raw).trim() : "";
   if (!trimmed) {
     if (!res.ok) {
-      return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_BAD_RESPONSE) };
+      return { ok: false, message: messageForHttpStatus(res.status) };
     }
     return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_JSON_PARSE) };
   }
 
   if (looksLikeHtmlResponse(trimmed)) {
-    return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_BAD_RESPONSE) };
+    return {
+      ok: false,
+      message: res.ok
+        ? "Sunucu JSON yerine HTML veya hata sayfası döndürdü. Barındırma günlüklerini (Vercel Runtime Logs) kontrol edin."
+        : messageForHttpStatus(res.status),
+    };
   }
 
   const data = tryParseApiJson(trimmed);
   if (!data) {
+    if (!res.ok) {
+      return { ok: false, message: messageForHttpStatus(res.status) };
+    }
     return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_JSON_PARSE) };
   }
 
@@ -110,10 +142,11 @@ export function parseQuizGenerateResponse(
     if (data.code && isQuizErrorCode(data.code)) {
       return { ok: false, message: getQuizUserMessage(data.code) };
     }
-    if (typeof data.error === "string" && data.error.trim()) {
-      return { ok: false, message: data.error.trim() };
+    const extracted = extractApiErrorText(data);
+    if (extracted) {
+      return { ok: false, message: extracted };
     }
-    return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_BAD_RESPONSE) };
+    return { ok: false, message: messageForHttpStatus(res.status) };
   }
 
   const rawList = Array.isArray(data.questions) ? data.questions : [];
@@ -131,7 +164,9 @@ export async function requestGenerateQuizWithPdfFile(file: File): Promise<QuizGe
 
   try {
     const formData = new FormData();
-    formData.append("file", file);
+    const safeName =
+      typeof file.name === "string" && file.name.trim().length > 0 ? file.name.trim() : "document.pdf";
+    formData.append("file", file, safeName);
 
     const res = await fetch("/api/generate-quiz", {
       method: "POST",
@@ -171,7 +206,9 @@ export async function requestPdfTextExtract(
 
   try {
     const formData = new FormData();
-    formData.append("file", file);
+    const safeName =
+      typeof file.name === "string" && file.name.trim().length > 0 ? file.name.trim() : "document.pdf";
+    formData.append("file", file, safeName);
 
     const res = await fetch("/api/extract-pdf", {
       method: "POST",
@@ -196,7 +233,7 @@ export async function requestPdfTextExtract(
       if (typeof data.error === "string" && data.error.trim()) {
         return { ok: false, message: data.error.trim() };
       }
-      return { ok: false, message: getQuizUserMessage(QuizErrorCode.API_BAD_RESPONSE) };
+      return { ok: false, message: messageForHttpStatus(res.status) };
     }
 
     const text = typeof data.text === "string" ? data.text : "";

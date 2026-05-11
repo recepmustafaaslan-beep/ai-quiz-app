@@ -10,7 +10,7 @@ import {
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
 import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
-import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";
@@ -100,9 +100,6 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       }
       const name = pdfFile.name?.toLowerCase() ?? "";
       const type = pdfFile.type;
-      if (type && type !== "application/pdf" && !name.endsWith(".pdf")) {
-        return { ok: false, response: jsonError(QuizErrorCode.PDF_INVALID, 400) };
-      }
 
       const read = await readUploadFileBuffer(pdfFile);
       if (!read.ok) {
@@ -110,6 +107,17 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
         return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
       }
       const buffer = read.buffer;
+
+      const pdfSig = bufferHasPdfSignature(buffer);
+      const mime = (type || "").toLowerCase();
+      const clearlyWrongMedia =
+        mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/");
+      if (clearlyWrongMedia && !pdfSig) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_INVALID, 400) };
+      }
+      if (!pdfSig && mime && !/^application\/(pdf|octet-stream|x-pdf)$/i.test(mime) && !name.endsWith(".pdf")) {
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_INVALID, 400) };
+      }
 
       let raw: string;
       try {

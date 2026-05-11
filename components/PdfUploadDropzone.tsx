@@ -131,7 +131,9 @@ export default function PdfUploadDropzone({
       >
         {isDragActive ? "Buraya bırakın…" : minimal ? "PDF sürükleyin veya seçin" : "Sürükle-bırak veya tıkla"}
       </p>
-      <p className="relative mt-1 text-xs text-zinc-600">Yalnızca .pdf</p>
+      <p className="relative mt-1 text-xs text-zinc-600">
+        Yalnızca .pdf · en fazla ~{(QUIZ_UPLOAD_LIMITS.maxFileBytes / (1024 * 1024)).toFixed(0)} MB
+      </p>
 
       <p
         className={

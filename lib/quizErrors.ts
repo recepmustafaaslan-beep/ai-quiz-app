@@ -39,7 +39,7 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
   [QuizErrorCode.PDF_READ_FAILED]:
     "Dosya okunurken bir sorun oluştu. Dosyayı tekrar seçmeyi veya başka bir PDF denemeyi deneyin.",
   [QuizErrorCode.PDF_TOO_LARGE]:
-    "Dosya boyutu çok büyük. En fazla 25 MB boyutunda PDF yükleyebilirsiniz.",
+    "Dosya boyutu çok büyük. Barındırma (ör. Vercel) tek seferde yaklaşık 4 MB istek kabul eder; daha küçük veya sıkıştırılmış bir PDF deneyin.",
   [QuizErrorCode.QUIZ_TEXT_TOO_LONG]:
     "Çıkarılan metin çok uzun. Daha kısa bir PDF veya tek ders notu bölümü yükleyin.",
   [QuizErrorCode.NETWORK]:
@@ -84,14 +84,44 @@ export function isQuizErrorCode(value: string): value is QuizErrorCodeType {
   return Object.values(QuizErrorCode).includes(value as QuizErrorCodeType);
 }
 
+/** Vercel / CDN gibi katmanların HTTP kodlarına göre kullanıcı mesajı */
+export function messageForHttpStatus(status: number): string {
+  if (!Number.isFinite(status) || status === 0) {
+    return "Ağ yanıtı tamamlanamadı (bağlantı kesildi veya engellendi). VPN / reklam engelleyiciyi kapatıp tekrar deneyin.";
+  }
+  if (status === 413) {
+    return "Yükleme boyutu sunucu sınırını aştı (çoğu ortamda ~4,5 MB). Daha küçük bir PDF seçin.";
+  }
+  if (status === 504 || status === 502 || status === 503) {
+    return "Sunucu zamanında yanıt veremedi veya geçici olarak kullanılamıyor. Bir süre sonra tekrar deneyin.";
+  }
+  if (status === 429) {
+    return MESSAGES[QuizErrorCode.OPENAI_RATE_LIMIT];
+  }
+  if (status === 401) {
+    return MESSAGES[QuizErrorCode.OPENAI_AUTH];
+  }
+  if (status >= 500) {
+    return `Sunucu hatası (HTTP ${status}). Lütfen bir süre sonra tekrar deneyin.`;
+  }
+  if (status >= 400) {
+    return `İstek tamamlanamadı (HTTP ${status}). Sayfayı yenileyip tekrar deneyin.`;
+  }
+  if (status >= 200 && status < 300) {
+    return "Sunucu başarı kodu döndü ama yanıt quiz verisi değil (çoğunlukla yapılandırma veya dağıtım hatası). Proje günlüklerine bakın.";
+  }
+  return `${MESSAGES[QuizErrorCode.API_BAD_RESPONSE]} (HTTP ${status})`;
+}
+
 /** Sunucu ve istemci tarafinda ayni esikler */
 export const QUIZ_TEXT_LIMITS = {
   minChars: 80,
   maxChars: 120_000,
 } as const;
 
+/** Vercel sunucusuz işlevler ~4,5 MB istek gövdesi sınırı koyar; üstü 413 veya bozuk yanıta düşer */
 export const QUIZ_UPLOAD_LIMITS = {
-  maxFileBytes: 25 * 1024 * 1024,
+  maxFileBytes: 4 * 1024 * 1024,
 } as const;
 
 /** pdf.js / tarayıcı hatalarından PDF_INVALID tahmini */

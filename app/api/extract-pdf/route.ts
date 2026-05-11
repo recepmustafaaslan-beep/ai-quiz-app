@@ -7,7 +7,7 @@ import {
   QUIZ_UPLOAD_LIMITS,
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
-import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 
 export const runtime = "nodejs";
 
@@ -44,11 +44,19 @@ export async function POST(req: Request) {
 
     const name = pdfFile.name?.toLowerCase() ?? "";
     const type = pdfFile.type;
-    if (type && type !== "application/pdf" && !name.endsWith(".pdf")) {
-      return jsonError(QuizErrorCode.PDF_INVALID, 400);
-    }
 
     const buffer = Buffer.from(await pdfFile.arrayBuffer());
+
+    const pdfSig = bufferHasPdfSignature(buffer);
+    const mime = (type || "").toLowerCase();
+    const clearlyWrongMedia =
+      mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/");
+    if (clearlyWrongMedia && !pdfSig) {
+      return jsonError(QuizErrorCode.PDF_INVALID, 400);
+    }
+    if (!pdfSig && mime && !/^application\/(pdf|octet-stream|x-pdf)$/i.test(mime) && !name.endsWith(".pdf")) {
+      return jsonError(QuizErrorCode.PDF_INVALID, 400);
+    }
 
     let data: { text: string };
     try {
