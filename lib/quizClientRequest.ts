@@ -249,6 +249,18 @@ export async function requestPdfTextExtract(
       signal: controller.signal,
     });
 
+    // If platform rejects multipart body as too large, fallback to browser-side text extraction.
+    if (res.status === 413) {
+      try {
+        const text = await extractPdfTextInBrowser(file);
+        if (text && text.trim().length > 0) {
+          return { ok: true, text };
+        }
+      } catch {
+        // continue to normal error handling below
+      }
+    }
+
     const raw = await readFetchBodyAsUtf8(res);
     let data: ExtractPdfJson;
     try {
