@@ -61,7 +61,7 @@ export default function Home() {
 
     try {
       if (selectedFile.size === 0) {
-        setErrorMessage(getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED));
+        setErrorMessage(getQuizUserMessage(QuizErrorCode.FILE_EMPTY));
         return;
       }
       if (selectedFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {

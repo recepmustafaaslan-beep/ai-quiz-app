@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const pdfFile = file as File;
 
     if (pdfFile.size === 0) {
-      return jsonError(QuizErrorCode.PDF_READ_FAILED, 400);
+      return jsonError(QuizErrorCode.FILE_EMPTY, 400);
     }
 
     if (pdfFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {

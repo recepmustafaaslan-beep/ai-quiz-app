@@ -7,6 +7,7 @@ export const QuizErrorCode = {
   PDF_EMPTY: "PDF_EMPTY",
   PDF_TEXT_TOO_SHORT: "PDF_TEXT_TOO_SHORT",
   PDF_READ_FAILED: "PDF_READ_FAILED",
+  FILE_EMPTY: "FILE_EMPTY",
   PDF_TOO_LARGE: "PDF_TOO_LARGE",
   QUIZ_TEXT_TOO_LONG: "QUIZ_TEXT_TOO_LONG",
   NETWORK: "NETWORK",
@@ -39,6 +40,8 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
     "Çıkarılan metin çok kısa; quiz üretmek için yeterli içerik yok. Daha zengin metinli bir PDF yükleyin.",
   [QuizErrorCode.PDF_READ_FAILED]:
     "Dosya okunurken bir sorun oluştu. Dosyayı tekrar seçmeyi veya başka bir PDF denemeyi deneyin.",
+  [QuizErrorCode.FILE_EMPTY]:
+    "Seçilen dosya boş (0 bayt) veya okunamadı. Dosyayı yeniden kaydedip tekrar seçin veya başka bir PDF deneyin.",
   [QuizErrorCode.PDF_TOO_LARGE]:
     "Dosya boyutu çok büyük. Barındırma (ör. Vercel) tek seferde yaklaşık 4 MB istek kabul eder; daha küçük veya sıkıştırılmış bir PDF deneyin.",
   [QuizErrorCode.QUIZ_TEXT_TOO_LONG]:

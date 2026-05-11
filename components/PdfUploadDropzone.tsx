@@ -38,7 +38,7 @@ export default function PdfUploadDropzone({
       if (!pickedFile || disabled || !onGenerateQuizResult) return;
 
       if (pickedFile.size === 0) {
-        onGenerateQuizResult({ ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED) });
+        onGenerateQuizResult({ ok: false, message: getQuizUserMessage(QuizErrorCode.FILE_EMPTY) });
         return;
       }
       if (pickedFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {
@@ -70,6 +70,8 @@ export default function PdfUploadDropzone({
     disabled,
     accept: {
       "application/pdf": [".pdf"],
+      /** iOS / bazı tarayıcılar PDF’i octet-stream ile gönderir */
+      "application/octet-stream": [".pdf"],
     },
   });
 

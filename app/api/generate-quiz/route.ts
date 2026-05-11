@@ -132,7 +132,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       const pdfFile = file as File;
 
       if (pdfFile.size === 0) {
-        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+        return { ok: false, response: jsonError(QuizErrorCode.FILE_EMPTY, 400) };
       }
       if (pdfFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {
         return { ok: false, response: jsonError(QuizErrorCode.PDF_TOO_LARGE, 400) };
@@ -143,7 +143,13 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       const read = await readUploadFileBuffer(pdfFile);
       if (!read.ok) {
         console.warn("[generate-quiz] file buffer read failed", read.reason);
-        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+        return {
+          ok: false,
+          response: jsonError(
+            read.reason === "empty" ? QuizErrorCode.FILE_EMPTY : QuizErrorCode.PDF_READ_FAILED,
+            400,
+          ),
+        };
       }
       const buffer = read.buffer;
 

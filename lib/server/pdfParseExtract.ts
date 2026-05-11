@@ -1,4 +1,5 @@
 import { extractPdfTextWithPdfJs } from "@/lib/server/extractPdfTextPdfJs";
+import { pdfBufferToUint8Array } from "@/lib/server/pdfBufferUint8";
 
 /**
  * Sunucuda PDF ikilisinden düz metin çıkarır (önce pdf-parse v2, boş/hata durumunda pdfjs yedeği).
@@ -8,13 +9,17 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
   let fromParse = "";
   try {
     const { PDFParse } = await import("pdf-parse");
-    const data = new Uint8Array(buffer);
+    const data = pdfBufferToUint8Array(buffer);
     const parser = new PDFParse({ data });
     try {
       const result = await parser.getText();
       fromParse = (result.text ?? "").trim();
     } finally {
-      await parser.destroy();
+      try {
+        await parser.destroy();
+      } catch (destroyErr) {
+        console.warn("[pdfParseExtract] parser.destroy failed", destroyErr);
+      }
     }
   } catch (e) {
     console.warn("[pdfParseExtract] PDFParse failed, will try pdfjs", e);
@@ -24,6 +29,10 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
     return fromParse;
   }
 
-  const fromJs = await extractPdfTextWithPdfJs(buffer);
-  return fromJs.trim();
+  try {
+    return (await extractPdfTextWithPdfJs(buffer)).trim();
+  } catch (e) {
+    console.error("[pdfParseExtract] pdfjs fallback failed", e);
+    return "";
+  }
 }
