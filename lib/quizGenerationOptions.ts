@@ -201,9 +201,10 @@ Pedagoji ve kalite kuralları:
 - Ezber/tanım tekrarı sorma; anlama, yorumlama, karşılaştırma, uygulama ve analiz düzeyinde sor.
 - Sorular akademik Türkçe ile yazılsın; konuşma dili ve aşırı kısa başlık tarzı ifadeler kullanma.
 - Her soruda tam 4 seçenek olsun; tek doğru cevap olsun; seçenekler birbirine anlamca yakın "tuzak" ama akademik olarak tutarlı olsun.
-- Doğru cevabın konumu (correctAnswerIndex) 0,1,2,3 arasında mümkün olduğunca dengeli dağılsın (örneğin her indekse yakın sayıda).
+- Doğru cevabın konumu (correctAnswerIndex) 0,1,2,3 arasında çeşitlendir; hepsini aynı indekste toplama.
 - Soru kökleri net, seçenekler dilbilgisi olarak paralel yapıda olsun.
 - Her soru için "explanation" alanı zorunlu: akademik Türkçe, 2–4 cümle; doğru seçeneğin ders metnine dayalı kısa gerekçesini yaz. Yanlış cevapta öğrenciye gösterilecek; doğru şıkkı savunur nitelikte olsun, diğer şıkları tek tek eleştirme.
+- explanation içinde A/B/C/D harfi veya "birinci/ikinci şık" gibi konuma bağlı ifade kullanma (şık sırası sonradan karıştırılabilir); yalnızca doğru kavramı anlat.
 
 Çıktı biçimi:
 - Yalnızca geçerli JSON dön; markdown, kod bloğu veya açıklama metni ekleme.
@@ -241,6 +242,7 @@ export function buildRepairSystemPrompt(
     "Çıktı: yalnızca geçerli JSON; markdown veya açıklama metni yok.",
     `Koşullar: ${verify}`,
     `Her soruda question, options (4 string), correctAnswerIndex 0-3, difficulty, explanation.`,
+    "correctAnswerIndex değerleri sorular arasında 0,1,2,3 üzerinde mümkün olduğunca çeşitlensin; explanation konuma (A/B) atıf yapmasın.",
     "Eksik geçerli soru varsa ders içeriğine uygun üret; fazla veya geçersiz girdileri ele.",
   ].join(" ");
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const LOADING_MESSAGES = [
-  "PDF analiz ediliyor…",
-  "Akıllı sorular üretiliyor…",
-  "Quiz oluşturuluyor…",
+const PHASES = [
+  { title: "Metin taranıyor", sub: "PDF’ten kavramlar ayrıştırılıyor" },
+  { title: "Şıklar dengeleniyor", sub: "A · B · C · D için adil dağılım" },
+  { title: "Soru kalitesi", sub: "Tuzak şıklar ve açıklamalar işleniyor" },
+  { title: "Son rötuş", sub: "Quiz paketin hazırlanıyor" },
 ] as const;
 
 type Props = {
@@ -13,17 +14,19 @@ type Props = {
 };
 
 export default function QuizGeneratingOverlay({ open }: Props) {
-  const [messageIndex, setMessageIndex] = useState(0);
+  const [phaseIndex, setPhaseIndex] = useState(0);
+
+  const letters = useMemo(() => ["A", "B", "C", "D"] as const, []);
 
   useEffect(() => {
     if (!open) {
-      void Promise.resolve().then(() => setMessageIndex(0));
+      void Promise.resolve().then(() => setPhaseIndex(0));
       return;
     }
 
     const id = window.setInterval(() => {
-      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, 2500);
+      setPhaseIndex((i) => (i + 1) % PHASES.length);
+    }, 2000);
 
     return () => window.clearInterval(id);
   }, [open]);
@@ -39,61 +42,86 @@ export default function QuizGeneratingOverlay({ open }: Props) {
 
   if (!open) return null;
 
+  const phase = PHASES[phaseIndex];
+
   return (
     <div
-      className="animate-fade-rise fixed inset-0 z-50 flex items-center justify-center bg-[#030712]/80 p-6 backdrop-blur-xl"
+      className="animate-fade-rise fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#030712]/88 p-4 backdrop-blur-2xl sm:p-6"
       role="alertdialog"
       aria-busy="true"
       aria-live="polite"
       aria-label="Quiz oluşturuluyor"
     >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/2 h-[min(90vw,520px)] w-[min(90vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-600/25 blur-[100px]" />
-        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-cyan-500/15 blur-[80px]" />
-      </div>
+      <div className="quiz-gen-mesh-bg pointer-events-none absolute inset-0 opacity-90" aria-hidden />
+      <div
+        className="pointer-events-none absolute -left-1/4 top-0 h-[120%] w-[70%] rounded-full bg-violet-600/20 blur-[120px]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -right-1/4 bottom-0 h-[90%] w-[60%] rounded-full bg-amber-500/15 blur-[100px]"
+        aria-hidden
+      />
 
-      <div className="relative w-full max-w-md">
-        <div className="absolute -inset-px rounded-[1.4rem] bg-gradient-to-b from-white/20 via-indigo-500/30 to-transparent opacity-50 blur" />
-        <div className="relative rounded-3xl border border-white/[0.1] bg-zinc-950/75 p-10 shadow-[0_24px_80px_-16px_rgba(0,0,0,0.75)] backdrop-blur-2xl">
-          <div className="flex flex-col items-center text-center">
-            <div className="relative h-28 w-28">
-              <div className="absolute inset-0 rounded-full border border-white/[0.08]" />
-              <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-indigo-400 border-r-cyan-400" />
-              <div className="absolute inset-[10px] rounded-full border border-white/5" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-cyan-300 to-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.8)]" />
-              </div>
+      <div className="relative w-full max-w-lg">
+        <div className="absolute -inset-[2px] rounded-[1.75rem] bg-gradient-to-br from-white/25 via-fuchsia-500/20 to-cyan-400/25 opacity-60 blur-md" />
+
+        <div className="relative overflow-hidden rounded-[1.65rem] border border-white/[0.12] bg-zinc-950/80 shadow-[0_32px_100px_-24px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.06] backdrop-blur-2xl">
+          <div
+            className="animate-quiz-gen-scan pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-cyan-400/10 via-transparent to-transparent"
+            aria-hidden
+          />
+
+          <div className="relative px-6 pb-8 pt-7 sm:px-10 sm:pb-10 sm:pt-9">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">
+                Canlı üretim
+              </p>
+              <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-200/90">
+                ~60 sn içinde
+              </span>
             </div>
 
-            <h2 className="mt-9 text-lg font-semibold tracking-tight text-white sm:text-xl">
-              Quiziniz hazırlanıyor
-            </h2>
-
-            <div className="relative mt-5 min-h-[3.75rem] w-full">
-              {LOADING_MESSAGES.map((msg, i) => (
-                <p
-                  key={msg}
-                  className={`absolute inset-x-0 top-0 text-sm font-medium transition-all duration-500 ease-out sm:text-[15px] ${
-                    messageIndex === i
-                      ? "translate-y-0 opacity-100"
-                      : "pointer-events-none translate-y-2 opacity-0"
-                  }`}
+            <div className="mt-6 flex justify-center gap-2 sm:gap-3">
+              {letters.map((L, i) => (
+                <div
+                  key={L}
+                  className="quiz-gen-pulse-dot flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.08] to-white/[0.02] text-sm font-black text-white shadow-inner sm:h-12 sm:w-12 sm:text-base"
+                  style={{ animationDelay: `${i * 0.18}s` }}
                 >
-                  <span className="bg-gradient-to-r from-zinc-200 via-white to-indigo-200 bg-clip-text text-transparent">
-                    {msg}
-                  </span>
-                </p>
+                  {L}
+                </div>
               ))}
             </div>
 
-            <div className="mt-11 flex gap-1.5">
-              {LOADING_MESSAGES.map((_, i) => (
+            <div className="relative mx-auto mt-8 flex h-36 w-36 items-center justify-center sm:h-40 sm:w-40">
+              <div className="animate-quiz-gen-orbit absolute inset-0 rounded-full border border-dashed border-violet-400/25" />
+              <div className="absolute inset-2 rounded-full border border-white/[0.06]" />
+              <div className="absolute inset-5 rounded-full border-2 border-transparent border-t-cyan-400 border-r-fuchsia-400 opacity-90" />
+              <div className="relative flex flex-col items-center gap-1">
+                <span className="text-2xl font-black tabular-nums tracking-tight text-white sm:text-3xl">AI</span>
+                <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-zinc-500">quiz</span>
+              </div>
+            </div>
+
+            <div className="relative mt-8 min-h-[4.5rem] text-center">
+              <h2 className="text-lg font-bold tracking-tight text-white transition duration-500 sm:text-xl">
+                {phase.title}
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400 transition duration-500 sm:text-[15px]">{phase.sub}</p>
+            </div>
+
+            <div className="mt-8 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800/80">
+              <div className="animate-quiz-gen-bar h-full w-2/5 rounded-full bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 shadow-[0_0_20px_rgba(167,139,250,0.45)]" />
+            </div>
+
+            <div className="mt-5 flex justify-center gap-1.5">
+              {PHASES.map((_, i) => (
                 <span
                   key={i}
                   className={`h-1 rounded-full transition-all duration-500 ease-out ${
-                    messageIndex === i
-                      ? "w-9 bg-gradient-to-r from-indigo-400 to-cyan-400 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
-                      : "w-1.5 bg-white/15 hover:bg-white/25"
+                    phaseIndex === i
+                      ? "w-10 bg-gradient-to-r from-violet-400 to-cyan-400 shadow-[0_0_12px_rgba(99,102,241,0.45)]"
+                      : "w-1.5 bg-white/12"
                   }`}
                 />
               ))}

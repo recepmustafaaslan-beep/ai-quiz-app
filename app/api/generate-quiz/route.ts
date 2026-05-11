@@ -25,6 +25,7 @@ import {
   targetCountsForPreset,
   type QuizDifficultyPreset,
 } from "@/lib/quizGenerationOptions";
+import { equalizeCorrectAnswerIndices } from "@/lib/equalizeCorrectAnswerIndices";
 import { tryParseQuizModelJson } from "@/lib/parseQuizModelJson";
 import { truncateQuizSourceText } from "@/lib/server/truncateQuizSourceText";
 
@@ -506,7 +507,7 @@ export async function POST(req: Request) {
 
   const shapeOkResponse = (qs: QuizQuestion[]): NextResponse | null => {
     if (qs.length === questionCount && countsMatchTarget(qs, targetCounts)) {
-      return NextResponse.json({ questions: qs });
+      return NextResponse.json({ questions: equalizeCorrectAnswerIndices(qs) });
     }
     if (qs.length === questionCount) {
       console.warn("[generate-quiz] model difficulty counts off; applying target rebalance", {
@@ -516,7 +517,9 @@ export async function POST(req: Request) {
         questionCount,
         difficultyPreset,
       });
-      return NextResponse.json({ questions: rebalanceToTargets(qs, targetOrder) });
+      return NextResponse.json({
+        questions: equalizeCorrectAnswerIndices(rebalanceToTargets(qs, targetOrder)),
+      });
     }
     return null;
   };
@@ -606,7 +609,7 @@ export async function POST(req: Request) {
     {
       code: QuizErrorCode.MODEL_SHAPE_INVALID,
       error: getQuizUserMessage(QuizErrorCode.MODEL_SHAPE_INVALID),
-      questions: sanitizedQuestions,
+      questions: equalizeCorrectAnswerIndices(sanitizedQuestions),
     },
     { status: 502 },
   );
