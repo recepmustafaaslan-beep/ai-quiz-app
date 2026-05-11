@@ -43,10 +43,30 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
     return fromParse;
   }
 
+  let fromJs = "";
   try {
-    return (await extractPdfTextWithPdfJs(buffer)).trim();
+    fromJs = (await extractPdfTextWithPdfJs(buffer)).trim();
   } catch (e) {
     console.error("[pdfParseExtract] pdfjs fallback failed", e);
-    return "";
   }
+  if (fromJs.length > 0) {
+    return fromJs;
+  }
+
+  if (process.env.OPENAI_API_KEY?.trim() && process.env.OPENAI_PDF_VISION_EXTRACT !== "0") {
+    try {
+      const { extractPlainTextFromPdfWithOpenAi } = await import(
+        "@/lib/server/extractPdfTextViaOpenAiResponses"
+      );
+      const fromAi = (await extractPlainTextFromPdfWithOpenAi(buffer)).trim();
+      if (fromAi.length > 0) {
+        console.log("[pdfParseExtract] OpenAI Responses PDF text length", fromAi.length);
+        return fromAi;
+      }
+    } catch (e) {
+      console.warn("[pdfParseExtract] OpenAI PDF text extract failed", e);
+    }
+  }
+
+  return "";
 }
