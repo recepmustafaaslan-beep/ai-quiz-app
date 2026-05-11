@@ -53,8 +53,11 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
     return fromJs;
   }
 
-  /** Varsayılan kapalı: ek OpenAI çağrısı yavaş ve maliyetlidir. Taranmış PDF için `OPENAI_PDF_VISION_EXTRACT=1` */
-  if (process.env.OPENAI_API_KEY?.trim() && process.env.OPENAI_PDF_VISION_EXTRACT === "1") {
+  /**
+   * Yerel çıkarım boşsa OpenAI Responses ile PDF’den metin (taranmış sayfalar).
+   * Varsayılan: açık (OPENAI_API_KEY varsa). Kapatmak: OPENAI_PDF_VISION_EXTRACT=0
+   */
+  if (process.env.OPENAI_API_KEY?.trim() && process.env.OPENAI_PDF_VISION_EXTRACT !== "0") {
     try {
       const { extractPlainTextFromPdfWithOpenAi } = await import(
         "@/lib/server/extractPdfTextViaOpenAiResponses"

@@ -4,10 +4,11 @@ import { QUIZ_UPLOAD_LIMITS } from "@/lib/quizErrors";
 const OPENAI_PDF_EXTRACT_TIMEOUT_MS = 45_000;
 
 /**
- * Yerel pdf-parse/pdfjs metin döndürmezse (taranmış PDF vb.) OpenAI Responses API
- * `input_file` ile PDF’yi modele verir.
+ * Yerel pdf-parse/pdfjs metin döndürmezse OpenAI Responses API `input_file` ile PDF’den metin.
  *
- * **Yalnızca** ortamda `OPENAI_PDF_VISION_EXTRACT=1` iken çağrılır (varsayılan kapalı; hız ve maliyet).
+ * Varsayılan: `pdfParseExtract` içinde OPENAI_API_KEY varken çalışır. Tüm projede kapatmak için:
+ * `OPENAI_PDF_VISION_EXTRACT=0`
+ *
  * Model: `OPENAI_PDF_EXTRACT_MODEL` (varsayılan `gpt-4o-mini`, yoksa `OPENAI_QUIZ_MODEL`)
  */
 export async function extractPlainTextFromPdfWithOpenAi(buffer: Buffer): Promise<string> {
