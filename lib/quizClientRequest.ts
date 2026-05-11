@@ -167,11 +167,30 @@ export type QuizGenerationRequestOptions = {
   difficultyPreset?: QuizDifficultyPreset;
 };
 
-/** PDF dosyası ile quiz üretir; zaman aşımı ve gövde okuma mobil için uyarlanmıştır */
+/**
+ * Multipart upload'un platform tarafından kesilmeyeceği güvenli üst sınır (~3.5 MB).
+ * Bu eşiğin üstündeki dosyalar direkt tarayıcıda metne çevrilip JSON olarak gönderilir.
+ */
+const MULTIPART_SAFE_BYTES = 3.5 * 1024 * 1024;
+
+/** PDF dosyası ile quiz üretir; büyük dosyalarda otomatik olarak browser-extract yolunu kullanır */
 export async function requestGenerateQuizWithPdfFile(
   file: File,
   options?: QuizGenerationRequestOptions,
 ): Promise<QuizGenerateClientResult> {
+  // Dosya çok büyükse platform multipart'ı keser (413). Direkt browser-side extract yap.
+  if (file.size > MULTIPART_SAFE_BYTES) {
+    try {
+      const text = await extractPdfTextInBrowser(file);
+      if (text && text.trim().length > 0) {
+        return await requestQuizGeneration(text, options);
+      }
+      return { ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_EMPTY) };
+    } catch {
+      return { ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED) };
+    }
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
 
@@ -195,7 +214,7 @@ export async function requestGenerateQuizWithPdfFile(
       signal: controller.signal,
     });
 
-    // If platform rejects multipart body as too large, fallback to browser-side extract → JSON text request.
+    // Beklenmedik 413 (eşik altı dosya için platform sınırı daha düşükse) fallback
     if (res.status === 413) {
       try {
         const text = await extractPdfTextInBrowser(file);
@@ -203,7 +222,7 @@ export async function requestGenerateQuizWithPdfFile(
           return await requestQuizGeneration(text, options);
         }
       } catch {
-        // if fallback fails, continue with normal error parsing
+        // fallback başarısız, normal hata akışına devam
       }
     }
 
@@ -232,6 +251,17 @@ type ExtractPdfJson = {
 export async function requestPdfTextExtract(
   file: File,
 ): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
+  // Büyük dosyalarda platform multipart'ı keser; direkt browser-side extract yap.
+  if (file.size > MULTIPART_SAFE_BYTES) {
+    try {
+      const text = await extractPdfTextInBrowser(file);
+      if (text && text.trim().length > 0) return { ok: true, text };
+      return { ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_EMPTY) };
+    } catch {
+      return { ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED) };
+    }
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
 
@@ -249,7 +279,7 @@ export async function requestPdfTextExtract(
       signal: controller.signal,
     });
 
-    // If platform rejects multipart body as too large, fallback to browser-side text extraction.
+    // Beklenmedik 413 fallback
     if (res.status === 413) {
       try {
         const text = await extractPdfTextInBrowser(file);
@@ -257,7 +287,7 @@ export async function requestPdfTextExtract(
           return { ok: true, text };
         }
       } catch {
-        // continue to normal error handling below
+        // normal hata akışına devam
       }
     }
 
