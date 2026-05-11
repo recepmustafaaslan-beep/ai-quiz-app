@@ -95,6 +95,125 @@ function extractAssistantCompletionText(message: {
   return { text: "", refusal: topRefusal };
 }
 
+function isDifficultyValue(d: unknown): d is Difficulty {
+  return d === "easy" || d === "medium" || d === "hard";
+}
+
+/** Pedagoji hedefi: 2 kolay, 4 orta, 4 zor (sıra önemli değil; burada sabit sıra atanıyor). */
+const PEDAGOGY_DIFFICULTY_ORDER: Difficulty[] = [
+  "easy",
+  "easy",
+  "medium",
+  "medium",
+  "medium",
+  "medium",
+  "hard",
+  "hard",
+  "hard",
+  "hard",
+];
+
+function sanitizeQuizQuestionsFromParsed(parsed: QuizResponse): QuizQuestion[] {
+  const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
+  const fallbackExplanation =
+    "Bu soruda doğru cevap, ders metnindeki ilgili kavrama ve tanımlara en uygun seçenektir.";
+
+  return questions
+    .filter(
+      (q) =>
+        typeof q?.question === "string" &&
+        Array.isArray(q?.options) &&
+        q.options.length === 4 &&
+        typeof q.correctAnswerIndex === "number" &&
+        [0, 1, 2, 3].includes(q.correctAnswerIndex) &&
+        isDifficultyValue(q.difficulty),
+    )
+    .slice(0, 10)
+    .map((q) => {
+      const rawEx =
+        typeof (q as { explanation?: unknown }).explanation === "string"
+          ? String((q as { explanation?: string }).explanation).trim()
+          : "";
+      return {
+        question: q.question,
+        options: [
+          String(q.options[0]),
+          String(q.options[1]),
+          String(q.options[2]),
+          String(q.options[3]),
+        ] as [string, string, string, string],
+        correctAnswerIndex: q.correctAnswerIndex as 0 | 1 | 2 | 3,
+        difficulty: q.difficulty as Difficulty,
+        explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
+      };
+    });
+}
+
+function pedagogyDistributionOk(qs: QuizQuestion[]): boolean {
+  if (qs.length !== 10) return false;
+  let easy = 0;
+  let medium = 0;
+  let hard = 0;
+  for (const q of qs) {
+    if (q.difficulty === "easy") easy++;
+    else if (q.difficulty === "medium") medium++;
+    else hard++;
+  }
+  return easy === 2 && medium === 4 && hard === 4;
+}
+
+function rebalancePedagogyDifficulties(qs: QuizQuestion[]): QuizQuestion[] {
+  return qs.slice(0, 10).map((q, i) => ({
+    ...q,
+    difficulty: PEDAGOGY_DIFFICULTY_ORDER[i] ?? q.difficulty,
+  }));
+}
+
+async function repairQuizResponseJson(
+  client: OpenAI,
+  model: string,
+  broken: QuizResponse,
+  repairSignal: AbortSignal,
+): Promise<QuizResponse | null> {
+  const sys = [
+    "Görev: Verilen quiz JSON şemasını düzelt.",
+    "Çıktı: yalnızca geçerli JSON; markdown veya açıklama metni yok.",
+    "Koşullar: tam 10 soru; her soruda question, options (4 string), correctAnswerIndex 0-3, difficulty, explanation.",
+    'Zorluk adetleri TAM: "easy" 2, "medium" 4, "hard" 4.',
+    "Eksik geçerli soru varsa ders içeriğine uygun üret; fazla veya geçersiz girdileri ele.",
+  ].join(" ");
+
+  let completion;
+  try {
+    completion = await client.chat.completions.create(
+      {
+        model,
+        temperature: 0.15,
+        max_completion_tokens: 8192,
+        messages: [
+          { role: "system", content: sys },
+          {
+            role: "user",
+            content: `Bu JSON'u şartlara göre düzelt:\n${JSON.stringify(broken).slice(0, 28_000)}`,
+          },
+        ],
+      },
+      { signal: repairSignal },
+    );
+  } catch (e) {
+    console.warn("[generate-quiz] repairQuizResponseJson request failed", e);
+    return null;
+  }
+
+  const { text, refusal } = extractAssistantCompletionText(completion.choices[0]?.message);
+  if (refusal || !text?.trim()) return null;
+  try {
+    return JSON.parse(text) as QuizResponse;
+  } catch {
+    return null;
+  }
+}
+
 async function resolvePdfTextFromRequest(req: Request): Promise<
   { ok: true; pdfText: string } | { ok: false; response: Response }
 > {
@@ -283,6 +402,7 @@ Kurallar:
 - correctAnswerIndex yalnızca 0, 1, 2 veya 3 olabilir.
 - difficulty yalnızca "easy", "medium" veya "hard" olabilir.
 - explanation her soruda anlamlı, boş olmayan bir metin olmalıdır.
+- Üretimden sonra kontrol edilecek: difficulty değerlerinden tam 2 tanesi "easy", tam 4 tanesi "medium", tam 4 tanesi "hard" olmalı (toplam 10 soru).
 `.trim();
 
   let completion;
@@ -347,42 +467,7 @@ Kurallar:
 
   let sanitizedQuestions: QuizQuestion[];
   try {
-    const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
-
-    const isDifficulty = (d: unknown): d is Difficulty =>
-      d === "easy" || d === "medium" || d === "hard";
-
-    const fallbackExplanation =
-      "Bu soruda doğru cevap, ders metnindeki ilgili kavrama ve tanımlara en uygun seçenektir.";
-
-    sanitizedQuestions = questions
-      .filter(
-        (q) =>
-          typeof q?.question === "string" &&
-          Array.isArray(q?.options) &&
-          q.options.length === 4 &&
-          [0, 1, 2, 3].includes(q.correctAnswerIndex) &&
-          isDifficulty(q.difficulty),
-      )
-      .slice(0, 10)
-      .map((q) => {
-        const rawEx =
-          typeof (q as { explanation?: unknown }).explanation === "string"
-            ? String((q as { explanation?: string }).explanation).trim()
-            : "";
-        return {
-          question: q.question,
-          options: [
-            String(q.options[0]),
-            String(q.options[1]),
-            String(q.options[2]),
-            String(q.options[3]),
-          ],
-          correctAnswerIndex: q.correctAnswerIndex as 0 | 1 | 2 | 3,
-          difficulty: q.difficulty as Difficulty,
-          explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
-        };
-      });
+    sanitizedQuestions = sanitizeQuizQuestionsFromParsed(parsed);
   } catch (sanitizeErr) {
     console.error("[generate-quiz] sanitize questions failed", sanitizeErr);
     return NextResponse.json(
@@ -394,24 +479,52 @@ Kurallar:
     );
   }
 
-  const easyCount = sanitizedQuestions.filter((q) => q.difficulty === "easy").length;
-  const mediumCount = sanitizedQuestions.filter((q) => q.difficulty === "medium").length;
-  const hardCount = sanitizedQuestions.filter((q) => q.difficulty === "hard").length;
-  const countsOk =
-    sanitizedQuestions.length === 10 && easyCount === 2 && mediumCount === 4 && hardCount === 4;
-
-  if (!countsOk) {
-    return NextResponse.json(
-      {
-        code: QuizErrorCode.MODEL_SHAPE_INVALID,
-        error: getQuizUserMessage(QuizErrorCode.MODEL_SHAPE_INVALID),
-        questions: sanitizedQuestions,
-      },
-      { status: 502 },
-    );
+  if (pedagogyDistributionOk(sanitizedQuestions)) {
+    return NextResponse.json({ questions: sanitizedQuestions });
   }
 
-  return NextResponse.json({ questions: sanitizedQuestions });
+  if (sanitizedQuestions.length === 10) {
+    console.warn("[generate-quiz] model difficulty counts off; applying pedagogy rebalance", {
+      easy: sanitizedQuestions.filter((q) => q.difficulty === "easy").length,
+      medium: sanitizedQuestions.filter((q) => q.difficulty === "medium").length,
+      hard: sanitizedQuestions.filter((q) => q.difficulty === "hard").length,
+    });
+    return NextResponse.json({ questions: rebalancePedagogyDifficulties(sanitizedQuestions) });
+  }
+
+  if (sanitizedQuestions.length >= 1) {
+    try {
+      const repairMs = process.env.NODE_ENV === "development" ? 45_000 : 20_000;
+      const repaired = await repairQuizResponseJson(
+        getOpenAIClient(),
+        QUIZ_MODEL,
+        parsed,
+        AbortSignal.timeout(repairMs),
+      );
+      if (repaired) {
+        const second = sanitizeQuizQuestionsFromParsed(repaired);
+        if (pedagogyDistributionOk(second)) {
+          return NextResponse.json({ questions: second });
+        }
+        if (second.length === 10) {
+          console.warn("[generate-quiz] repair ok but counts off; rebalance");
+          return NextResponse.json({ questions: rebalancePedagogyDifficulties(second) });
+        }
+        sanitizedQuestions = second;
+      }
+    } catch (repairErr) {
+      console.warn("[generate-quiz] repair path failed", repairErr);
+    }
+  }
+
+  return NextResponse.json(
+    {
+      code: QuizErrorCode.MODEL_SHAPE_INVALID,
+      error: getQuizUserMessage(QuizErrorCode.MODEL_SHAPE_INVALID),
+      questions: sanitizedQuestions,
+    },
+    { status: 502 },
+  );
   } catch (error) {
     console.error(
       "[generate-quiz] POST unhandled",
