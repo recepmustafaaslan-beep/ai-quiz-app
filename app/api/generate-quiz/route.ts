@@ -10,7 +10,8 @@ import {
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
 import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
-import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { bufferHasPdfSignature } from "@/lib/server/pdfSignature";
 import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";

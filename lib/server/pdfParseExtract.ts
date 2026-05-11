@@ -1,17 +1,13 @@
-import { PDFParse } from "pdf-parse";
 import { extractPdfTextWithPdfJs } from "@/lib/server/extractPdfTextPdfJs";
-
-/** İlk baytlar %PDF ise gerçek PDF ikilisi kabul edilir (iOS sık octet-stream gönderir). */
-export function bufferHasPdfSignature(buffer: Buffer): boolean {
-  return buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46;
-}
 
 /**
  * Sunucuda PDF ikilisinden düz metin çıkarır (önce pdf-parse v2, boş/hata durumunda pdfjs yedeği).
+ * `pdf-parse` yalnızca çağrı anında yüklenir — Vercel’de route modülü yüklenirken çökme riski azalır.
  */
 export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
   let fromParse = "";
   try {
+    const { PDFParse } = await import("pdf-parse");
     const data = new Uint8Array(buffer);
     const parser = new PDFParse({ data });
     try {

@@ -7,7 +7,8 @@ import {
   QUIZ_UPLOAD_LIMITS,
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
-import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
+import { bufferHasPdfSignature } from "@/lib/server/pdfSignature";
 
 export const runtime = "nodejs";
 
