@@ -1,0 +1,91 @@
+[
+  { "id": "q1", "category": "JavaScript", "difficulty": "easy", "prompt": "JavaScript'te degisken tanimlamak icin hangisi kullanilir?", "choices": ["let", "var()", "const{}", "define"], "answerIndex": 0 },
+  { "id": "q2", "category": "JavaScript", "difficulty": "easy", "prompt": "Bir dizinin uzunlugunu hangi ozellik verir?", "choices": ["size", "count", "length", "total"], "answerIndex": 2 },
+  { "id": "q3", "category": "JavaScript", "difficulty": "easy", "prompt": "Hangisi strict esitligi kontrol eder?", "choices": ["==", "===", "!=", "="], "answerIndex": 1 },
+  { "id": "q4", "category": "JavaScript", "difficulty": "easy", "prompt": "Konsola yazi yazdirmak icin hangisi kullanilir?", "choices": ["print()", "echo()", "console.log()", "writeLine()"], "answerIndex": 2 },
+  { "id": "q5", "category": "JavaScript", "difficulty": "easy", "prompt": "Boolean veri tipi hangilerinden biridir?", "choices": ["true/false", "yes/no", "on/off", "1/0 only"], "answerIndex": 0 },
+
+  { "id": "q6", "category": "JavaScript", "difficulty": "medium", "prompt": "Array.map() ne dondurur?", "choices": ["Tek bir sayi", "Yeni bir dizi", "Boolean", "Object zorunlu"], "answerIndex": 1 },
+  { "id": "q7", "category": "JavaScript", "difficulty": "medium", "prompt": "JSON.parse() ne yapar?", "choices": ["Objeyi stringe cevirir", "Stringi objeye cevirir", "Diziyi siralar", "HTML uretir"], "answerIndex": 1 },
+  { "id": "q8", "category": "JavaScript", "difficulty": "medium", "prompt": "Promise basarili olursa hangi metot calisir?", "choices": [".catch()", ".then()", ".finally()", ".retry()"], "answerIndex": 1 },
+  { "id": "q9", "category": "JavaScript", "difficulty": "medium", "prompt": "Rest operatoru hangisidir?", "choices": ["...", "&&", "??", "=>"], "answerIndex": 0 },
+  { "id": "q10", "category": "JavaScript", "difficulty": "medium", "prompt": "setTimeout hangi tur API'dir?", "choices": ["Senkron", "Asenkron", "Sadece Node", "Sadece TS"], "answerIndex": 1 },
+
+  { "id": "q11", "category": "JavaScript", "difficulty": "hard", "prompt": "Closure icin en dogru ifade hangisi?", "choices": ["Fonksiyonun dis degiskenleri hatirlamasi", "Sadece class kullanimi", "Senkron calisma zorunlulugu", "Mutlaka recursion"], "answerIndex": 0 },
+  { "id": "q12", "category": "JavaScript", "difficulty": "hard", "prompt": "Event loop'un gorevi nedir?", "choices": ["Bellek temizlemek", "Asenkron callbackleri siralamak", "Type checking yapmak", "Bundle olusturmak"], "answerIndex": 1 },
+  { "id": "q13", "category": "JavaScript", "difficulty": "hard", "prompt": "Object.freeze() ne yapar?", "choices": ["Objeyi siler", "Objeyi immutable hale getirir", "Objeyi kopyalar", "Objeyi stringify eder"], "answerIndex": 1 },
+  { "id": "q14", "category": "JavaScript", "difficulty": "hard", "prompt": "nullish coalescing operatoru hangisidir?", "choices": ["||", "&&", "??", "?: "], "answerIndex": 2 },
+  { "id": "q15", "category": "JavaScript", "difficulty": "hard", "prompt": "Debounce en cok hangi durumda kullanilir?", "choices": ["Sik tetiklenen eventleri azaltmak", "CSS hizlandirmak", "Type hatasi duzeltmek", "DOM'u silmek"], "answerIndex": 0 },
+
+  { "id": "q16", "category": "React", "difficulty": "easy", "prompt": "React'te UI ne ile olusturulur?", "choices": ["Templates", "Components", "Controllers", "Schemas"], "answerIndex": 1 },
+  { "id": "q17", "category": "React", "difficulty": "easy", "prompt": "State okumak ve yazmak icin hangi hook kullanilir?", "choices": ["useRef", "useMemo", "useState", "useId"], "answerIndex": 2 },
+  { "id": "q18", "category": "React", "difficulty": "easy", "prompt": "Liste render ederken hangi prop onemlidir?", "choices": ["name", "value", "key", "refOnly"], "answerIndex": 2 },
+  { "id": "q19", "category": "React", "difficulty": "easy", "prompt": "JSX icinde JavaScript nasil yazilir?", "choices": ["()", "[]", "{}", "<>"], "answerIndex": 2 },
+  { "id": "q20", "category": "React", "difficulty": "easy", "prompt": "Bir component'e veri gondermek icin ne kullanilir?", "choices": ["props", "routes", "events", "threads"], "answerIndex": 0 },
+
+  { "id": "q21", "category": "React", "difficulty": "medium", "prompt": "useEffect ne zaman calisir?", "choices": ["Sadece ilk render", "Render sonrasi yan etkilerde", "Sadece clickte", "Sadece serverda"], "answerIndex": 1 },
+  { "id": "q22", "category": "React", "difficulty": "medium", "prompt": "Controlled input nedir?", "choices": ["State ile yonetilen input", "Sadece readonly input", "Type'siz input", "Sadece number input"], "answerIndex": 0 },
+  { "id": "q23", "category": "React", "difficulty": "medium", "prompt": "Fragment kullanimi ne saglar?", "choices": ["Ekstra DOM node olmadan gruplama", "State sifirlama", "Route degistirme", "CSS importu"], "answerIndex": 0 },
+  { "id": "q24", "category": "React", "difficulty": "medium", "prompt": "useMemo temel olarak neden kullanilir?", "choices": ["Side effect icin", "Maliyetli hesaplari onbellekleme", "State yazmak", "Event binding"], "answerIndex": 1 },
+  { "id": "q25", "category": "React", "difficulty": "medium", "prompt": "Prop drilling neyi ifade eder?", "choices": ["Hook hatasi", "State'in cok katmanli aktarimi", "CSS sorunu", "Build sorunu"], "answerIndex": 1 },
+
+  { "id": "q26", "category": "React", "difficulty": "hard", "prompt": "React reconciliation neyle ilgilidir?", "choices": ["Virtual DOM fark hesaplama", "Network cache", "Type emit", "ESLint rules"], "answerIndex": 0 },
+  { "id": "q27", "category": "React", "difficulty": "hard", "prompt": "useCallback neyi optimize eder?", "choices": ["Degerleri", "Fonksiyon referanslarini", "CSS classlarini", "Fetch surelerini"], "answerIndex": 1 },
+  { "id": "q28", "category": "React", "difficulty": "hard", "prompt": "Context API'nin amaci nedir?", "choices": ["Global benzeri veri paylasimi", "Animasyon", "Database baglantisi", "Sadece test"], "answerIndex": 0 },
+  { "id": "q29", "category": "React", "difficulty": "hard", "prompt": "React Strict Mode neye yardim eder?", "choices": ["Prod performans artirir", "Potansiyel sorunlari gelistirmede yakalar", "Bundle'i kucultur", "Type zorunlu kilar"], "answerIndex": 1 },
+  { "id": "q30", "category": "React", "difficulty": "hard", "prompt": "Memoization hangi durumda faydalidir?", "choices": ["Her zaman", "Gereksiz yeniden renderi azaltirken", "Sadece class componentte", "Sadece dev modda"], "answerIndex": 1 },
+
+  { "id": "q31", "category": "Next.js", "difficulty": "easy", "prompt": "App Router'da sayfa dosya adi nedir?", "choices": ["index.tsx", "page.tsx", "view.tsx", "home.tsx"], "answerIndex": 1 },
+  { "id": "q32", "category": "Next.js", "difficulty": "easy", "prompt": "Link component'i hangi paketten gelir?", "choices": ["react-router", "next/link", "next/router", "vercel/link"], "answerIndex": 1 },
+  { "id": "q33", "category": "Next.js", "difficulty": "easy", "prompt": "Statik dosyalar hangi klasorde tutulur?", "choices": ["src", "assets", "public", "static-only"], "answerIndex": 2 },
+  { "id": "q34", "category": "Next.js", "difficulty": "easy", "prompt": "Client component belirtmek icin ne yazilir?", "choices": ["use strict", "\"use client\"", "client:true", "@client"], "answerIndex": 1 },
+  { "id": "q35", "category": "Next.js", "difficulty": "easy", "prompt": "Gelisim sunucusu hangi komutla acilir?", "choices": ["next open", "npm run dev", "npm run prod", "next start dev"], "answerIndex": 1 },
+
+  { "id": "q36", "category": "Next.js", "difficulty": "medium", "prompt": "Dynamic route ornegi hangisi?", "choices": ["app/user/page.tsx", "app/user/[id]/page.tsx", "app/(id)/page.tsx", "app/id?.tsx"], "answerIndex": 1 },
+  { "id": "q37", "category": "Next.js", "difficulty": "medium", "prompt": "API route App Router'da hangi dosya ile yazilir?", "choices": ["api.tsx", "route.ts", "handler.js", "endpoint.tsx"], "answerIndex": 1 },
+  { "id": "q38", "category": "Next.js", "difficulty": "medium", "prompt": "next/image avantajlarindan biri nedir?", "choices": ["TypeScript'i kapatir", "Resim optimizasyonu", "CSS derler", "State tutar"], "answerIndex": 1 },
+  { "id": "q39", "category": "Next.js", "difficulty": "medium", "prompt": "Metadata nerede tanimlanabilir?", "choices": ["component disinda export ile", "sadece json", "yalnizca env", "layout yok"], "answerIndex": 0 },
+  { "id": "q40", "category": "Next.js", "difficulty": "medium", "prompt": "Server component varsayilan olarak nerede calisir?", "choices": ["Browser", "Server", "Service worker", "Electron"], "answerIndex": 1 },
+
+  { "id": "q41", "category": "Next.js", "difficulty": "hard", "prompt": "ISR neyi saglar?", "choices": ["Her istekte rebuild", "Artimli statik yeniden olusturma", "Sadece client render", "SSR kapatma"], "answerIndex": 1 },
+  { "id": "q42", "category": "Next.js", "difficulty": "hard", "prompt": "generateStaticParams ne icin kullanilir?", "choices": ["Dynamic route'lar icin statik param uretmek", "Cookie okumak", "Middleware yazmak", "Image optimize etmek"], "answerIndex": 0 },
+  { "id": "q43", "category": "Next.js", "difficulty": "hard", "prompt": "Middleware dosyasi genelde nerede olur?", "choices": ["app/middleware.tsx", "kökte middleware.ts", "public/middleware.js", "pages/_middleware.ts zorunlu"], "answerIndex": 1 },
+  { "id": "q44", "category": "Next.js", "difficulty": "hard", "prompt": "revalidate ayari neyi kontrol eder?", "choices": ["Linter calisma suresi", "Onbellek yenileme araligi", "Type check seviyesi", "Route adi"], "answerIndex": 1 },
+  { "id": "q45", "category": "Next.js", "difficulty": "hard", "prompt": "Turbopack ne ile ilgilidir?", "choices": ["Veritabani", "Build/dev bundler", "Routing kurali", "State yonetimi"], "answerIndex": 1 },
+
+  { "id": "q46", "category": "Web", "difficulty": "easy", "prompt": "HTTP 200 neyi ifade eder?", "choices": ["Basarili istek", "Bulunamadi", "Yetkisiz", "Sunucu hatasi"], "answerIndex": 0 },
+  { "id": "q47", "category": "Web", "difficulty": "easy", "prompt": "HTTP 404 ne anlama gelir?", "choices": ["Istek basarili", "Kaynak bulunamadi", "Sunucu coktu", "Yetkili giris"], "answerIndex": 1 },
+  { "id": "q48", "category": "Web", "difficulty": "easy", "prompt": "Tarayici ve sunucu arasinda guvenli iletisim icin hangisi kullanilir?", "choices": ["FTP", "HTTP", "HTTPS", "SMTP"], "answerIndex": 2 },
+  { "id": "q49", "category": "Web", "difficulty": "easy", "prompt": "Bir URL'nin alan adi kismina ne denir?", "choices": ["path", "domain", "query", "hash"], "answerIndex": 1 },
+  { "id": "q50", "category": "Web", "difficulty": "easy", "prompt": "GET istegi genelde ne icin kullanilir?", "choices": ["Veri silme", "Veri okuma", "Veri guncelleme", "Sunucu kapatma"], "answerIndex": 1 },
+
+  { "id": "q51", "category": "Web", "difficulty": "medium", "prompt": "POST istegi genelde ne yapar?", "choices": ["Veri olusturur/gonderir", "Sadece okur", "Sadece siler", "Cache temizler"], "answerIndex": 0 },
+  { "id": "q52", "category": "Web", "difficulty": "medium", "prompt": "CORS neyi kontrol eder?", "choices": ["Stil dosyalari", "Alanlar arasi kaynak erisimi", "Type tanimlari", "Bundle boyutu"], "answerIndex": 1 },
+  { "id": "q53", "category": "Web", "difficulty": "medium", "prompt": "Cookie en cok ne icin kullanilir?", "choices": ["Session bilgisi tasimak", "Video stream", "SQL yazmak", "Image optimize etmek"], "answerIndex": 0 },
+  { "id": "q54", "category": "Web", "difficulty": "medium", "prompt": "JWT acilimi nedir?", "choices": ["Java Web Token", "JSON Web Token", "JavaScript Wire Token", "Joint Web Ticket"], "answerIndex": 1 },
+  { "id": "q55", "category": "Web", "difficulty": "medium", "prompt": "HTTP 401 neyi gosterir?", "choices": ["Basarili", "Yetkilendirme gerekli", "Bulunamadi", "Timeout"], "answerIndex": 1 },
+
+  { "id": "q56", "category": "Web", "difficulty": "hard", "prompt": "Idempotent method ornegi hangisidir?", "choices": ["POST", "PATCH", "GET", "CONNECT"], "answerIndex": 2 },
+  { "id": "q57", "category": "Web", "difficulty": "hard", "prompt": "CDN'in temel faydasi nedir?", "choices": ["Kod yazmak", "Icerigi kullaniciya yakin noktadan sunmak", "DB migration", "Type conversion"], "answerIndex": 1 },
+  { "id": "q58", "category": "Web", "difficulty": "hard", "prompt": "HTTP 304 ne ifade eder?", "choices": ["Not Modified", "Created", "Gone", "Forbidden"], "answerIndex": 0 },
+  { "id": "q59", "category": "Web", "difficulty": "hard", "prompt": "SameSite cookie ozelligi neyi etkiler?", "choices": ["Cross-site gonderim davranisi", "Renk temasi", "Image quality", "Bundle split"], "answerIndex": 0 },
+  { "id": "q60", "category": "Web", "difficulty": "hard", "prompt": "Rate limiting neyi onlemeye yardim eder?", "choices": ["Asiri istek/abuse", "CSS cakismasi", "DOM nesting", "Type widening"], "answerIndex": 0 },
+
+  { "id": "q61", "category": "CSS", "difficulty": "easy", "prompt": "Metni ortaya hizalamak icin hangisi kullanilir?", "choices": ["justify-content", "text-center", "items-center", "mx-auto"], "answerIndex": 1 },
+  { "id": "q62", "category": "CSS", "difficulty": "easy", "prompt": "Tailwind'de flex container yapmak icin ne yazilir?", "choices": ["grid", "block", "flex", "inline"], "answerIndex": 2 },
+  { "id": "q63", "category": "CSS", "difficulty": "easy", "prompt": "Arka plan rengi vermek icin hangi utility kullanilir?", "choices": ["text-*", "bg-*", "border-*", "font-*"], "answerIndex": 1 },
+  { "id": "q64", "category": "CSS", "difficulty": "easy", "prompt": "Yatay bosluk icin Tailwind'de hangisi kullanilir?", "choices": ["px-*", "py-*", "pt-*", "mt-*"], "answerIndex": 0 },
+  { "id": "q65", "category": "CSS", "difficulty": "easy", "prompt": "Yuvarlak koseler icin hangisi kullanilir?", "choices": ["rounded-*", "shadow-*", "ring-*", "opacity-*"], "answerIndex": 0 },
+
+  { "id": "q66", "category": "CSS", "difficulty": "medium", "prompt": "Flex'te elemanlari dikey ortalamak icin hangisi?", "choices": ["justify-center", "items-center", "content-center", "self-center only"], "answerIndex": 1 },
+  { "id": "q67", "category": "CSS", "difficulty": "medium", "prompt": "Tailwind'de responsive breakpoint oneki ornegi hangisi?", "choices": ["md:", "break:", "res:", "screen:"], "answerIndex": 0 },
+  { "id": "q68", "category": "CSS", "difficulty": "medium", "prompt": "z-index utility'si hangisidir?", "choices": ["index-*", "z-*", "layer-*", "stack-*"], "answerIndex": 1 },
+  { "id": "q69", "category": "CSS", "difficulty": "medium", "prompt": "Grid sutun sayisini belirlemek icin hangisi kullanilir?", "choices": ["grid-rows-*", "grid-cols-*", "col-span-*", "row-span-*"], "answerIndex": 1 },
+  { "id": "q70", "category": "CSS", "difficulty": "medium", "prompt": "Hover durumunda renk degistirmek icin hangi onek kullanilir?", "choices": ["focus:", "active:", "hover:", "visited:"], "answerIndex": 2 },
+
+  { "id": "q71", "category": "CSS", "difficulty": "hard", "prompt": "Specificity'de en yuksek etki genelde hangisindedir?", "choices": ["Element selector", "Class selector", "Inline style", "Universal selector"], "answerIndex": 2 },
+  { "id": "q72", "category": "CSS", "difficulty": "hard", "prompt": "Tailwind'de oncelikli stil vermek icin hangi isaret kullanilabilir?", "choices": ["#", "!", "@", "$"], "answerIndex": 1 },
+  { "id": "q73", "category": "CSS", "difficulty": "hard", "prompt": "position: sticky davranisi icin genelde ne gerekir?", "choices": ["z-index sifir", "Top/left gibi offset", "display:none", "float:right"], "answerIndex": 1 },
+  { "id": "q74", "category": "CSS", "difficulty": "hard", "prompt": "GPU hizlandirma icin sikca hangi property degisir?", "choices": ["width", "left", "transform", "margin"], "answerIndex": 2 },
+  { "id": "q75", "category": "CSS", "difficulty": "hard", "prompt": "CLS'yi azaltmak icin resimlerde ne yapmak faydalidir?", "choices": ["Her zaman lazy olmamasi", "Genislik/yukseklik belirtmek", "Sadece webp kullanmak", "Shadow kaldirmak"], "answerIndex": 1 }
+]

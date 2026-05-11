@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+:root {
+  --background: #030712;
+  --foreground: #f4f4f5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.011em;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #fafafa;
+}
+
+@keyframes quiz-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes quiz-result-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-quiz-card {
+  animation: quiz-card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-quiz-result {
+  animation: quiz-result-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-rise {
+  animation: fade-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-rise-delay-1 {
+  animation: fade-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.animate-fade-rise-delay-2 {
+  animation: fade-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 2.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-quiz-card,
+  .animate-quiz-result,
+  .animate-fade-rise,
+  .animate-fade-rise-delay-1,
+  .animate-fade-rise-delay-2 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .btn-shimmer::after {
+    animation: none;
+    display: none;
+  }
+}
