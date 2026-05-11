@@ -62,9 +62,11 @@ const QUIZ_MODEL = process.env.OPENAI_QUIZ_MODEL?.trim() || "gpt-4o-mini";
 /** Üretimde maxDuration (60s) içinde kal; tamamlama + repair için pay bırakılır */
 const OPENAI_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 120_000 : 44_000;
 const QUIZ_MAX_COMPLETION_TOKENS = 16_000;
-const QUIZ_FILL_MAX_COMPLETION_TOKENS = 5_000;
-const REPAIR_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 45_000 : 26_000;
-const FILL_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 35_000 : 20_000;
+const REPAIR_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 45_000 : 28_000;
+const FILL_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 35_000 : 24_000;
+const REPAIR_JSON_MAX_CHARS = 120_000;
+const MAX_REPAIR_ROUNDS = 3;
+const MAX_FILL_ROUNDS = 5;
 
 function jsonError(code: QuizErrorCodeType, status: number) {
   return NextResponse.json({ code, error: getQuizUserMessage(code) }, { status });
@@ -114,6 +116,14 @@ function extractAssistantCompletionText(message: {
   return { text: "", refusal: topRefusal };
 }
 
+function parseCorrectAnswerIndex(idxRaw: unknown): 0 | 1 | 2 | 3 | null {
+  const n = typeof idxRaw === "number" ? idxRaw : Number(idxRaw);
+  if (!Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  if (r === 0 || r === 1 || r === 2 || r === 3) return r;
+  return null;
+}
+
 function sanitizeQuizQuestionsFromParsed(
   parsed: QuizResponse,
   limit: number,
@@ -124,37 +134,35 @@ function sanitizeQuizQuestionsFromParsed(
 
   return questions
     .map((q) => {
-      const idxRaw = (q as { correctAnswerIndex?: unknown }).correctAnswerIndex;
-      const idx = typeof idxRaw === "number" ? idxRaw : Number(idxRaw);
+      const idx = parseCorrectAnswerIndex((q as { correctAnswerIndex?: unknown }).correctAnswerIndex);
       return { q, idx };
     })
     .filter(({ q, idx }) => {
-      const d = normalizeDifficultyForQuiz(q.difficulty);
       return (
         typeof q?.question === "string" &&
+        q.question.trim().length > 0 &&
         Array.isArray(q?.options) &&
-        q.options.length === 4 &&
-        Number.isInteger(idx) &&
-        [0, 1, 2, 3].includes(idx) &&
-        d !== null
+        q.options.length >= 4 &&
+        idx !== null
       );
     })
     .slice(0, limit)
     .map(({ q, idx }) => {
-      const d = normalizeDifficultyForQuiz(q.difficulty)!;
+      const d = normalizeDifficultyForQuiz(q.difficulty) ?? "medium";
       const rawEx =
         typeof (q as { explanation?: unknown }).explanation === "string"
           ? String((q as { explanation?: string }).explanation).trim()
           : "";
+      const o = q.options as unknown[];
       return {
-        question: q.question,
-        options: [
-          String(q.options[0]),
-          String(q.options[1]),
-          String(q.options[2]),
-          String(q.options[3]),
-        ] as [string, string, string, string],
-        correctAnswerIndex: idx as 0 | 1 | 2 | 3,
+        question: q.question.trim(),
+        options: [String(o[0]), String(o[1]), String(o[2]), String(o[3])] as [
+          string,
+          string,
+          string,
+          string,
+        ],
+        correctAnswerIndex: idx!,
         difficulty: d,
         explanation: rawEx.length > 0 ? rawEx : fallbackExplanation,
       };
@@ -196,14 +204,17 @@ async function generateFillInQuestions(
   need: number,
   difficultiesNeeded: Difficulty[],
   signal: AbortSignal,
+  maxCompletionTokens?: number,
 ): Promise<QuizResponse | null> {
   if (need <= 0 || difficultiesNeeded.length !== need) return null;
   const orderHint = difficultiesNeeded.map((d, i) => `${i + 1}:${d}`).join(", ");
+  const fillTokens =
+    maxCompletionTokens ?? Math.min(12_000, 1_600 + need * 900);
   const sys = [
     "Görev: Verilen ders notundan yalnızca eksik kalan quiz sorularını üret.",
     'Çıktı: yalnızca geçerli JSON nesnesi, kök anahtar "questions" (dizi).',
-    `Tam olarak ${need} soru üret; soruların difficulty alanı şu sıraya uymalı: ${orderHint}`,
-    "Her soru: question (string), options (tam 4 string), correctAnswerIndex (0-3 tam sayı), difficulty, explanation (string).",
+    `Tam olarak ${need} soru üret; difficulty için tercih sırası: ${orderHint} (uyamazsan hepsi "medium" olabilir, sunucu düzeltir).`,
+    "Her soru: question (string), options (en az 4 string; fazlaysa ilk 4), correctAnswerIndex 0-3, difficulty, explanation (string).",
     "Akademik Türkçe; tek doğru şık.",
   ].join(" ");
   const user = `Ders metni:\n${sourceText}`;
@@ -214,7 +225,7 @@ async function generateFillInQuestions(
       model,
       sys,
       user,
-      QUIZ_FILL_MAX_COMPLETION_TOKENS,
+      fillTokens,
       0.32,
       signal,
     );
@@ -226,6 +237,37 @@ async function generateFillInQuestions(
   const loose = tryParseQuizModelJson(raw);
   if (!loose) return null;
   return { questions: loose.questions as QuizResponse["questions"] };
+}
+
+async function tryFillRemainingQuestions(
+  client: OpenAI,
+  model: string,
+  pdfForModel: string,
+  base: QuizQuestion[],
+  questionCount: number,
+  targetOrder: Difficulty[],
+): Promise<QuizQuestion[] | null> {
+  if (base.length === 0 || base.length >= questionCount) return null;
+  let acc = rebalanceToTargets(base, targetOrder.slice(0, base.length));
+  for (let r = 0; r < MAX_FILL_ROUNDS && acc.length < questionCount; r++) {
+    const need = questionCount - acc.length;
+    const chunk = Math.min(need, 4);
+    const suffixTargets = targetOrder.slice(acc.length, acc.length + chunk);
+    const fillParsed = await generateFillInQuestions(
+      client,
+      model,
+      pdfForModel,
+      chunk,
+      suffixTargets,
+      AbortSignal.timeout(FILL_TIMEOUT_MS),
+    );
+    if (!fillParsed) continue;
+    const part = sanitizeQuizQuestionsFromParsed(fillParsed, chunk);
+    if (part.length === 0) continue;
+    const add = part.slice(0, Math.min(part.length, need));
+    acc = [...acc, ...add];
+  }
+  return acc.length === questionCount ? acc : null;
 }
 
 async function repairQuizResponseJson(
@@ -244,13 +286,13 @@ async function repairQuizResponseJson(
       {
         model,
         temperature: 0.15,
-        max_completion_tokens: 8192,
+        max_completion_tokens: 16_000,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: sys },
           {
             role: "user",
-            content: `Bu JSON'u şartlara göre düzelt:\n${JSON.stringify(broken).slice(0, 28_000)}`,
+            content: `Bu JSON'u şartlara göre düzelt:\n${JSON.stringify(broken).slice(0, REPAIR_JSON_MAX_CHARS)}`,
           },
         ],
       },
@@ -532,15 +574,18 @@ export async function POST(req: Request) {
     (sanitizedQuestions.length > 0 || rawQuestionCount > 0)
   ) {
     try {
-      const repaired = await repairQuizResponseJson(
-        client,
-        model,
-        parsed,
-        questionCount,
-        difficultyPreset,
-        AbortSignal.timeout(REPAIR_TIMEOUT_MS),
-      );
-      if (repaired) {
+      let broken: QuizResponse = parsed;
+      for (let repairRound = 0; repairRound < MAX_REPAIR_ROUNDS; repairRound++) {
+        const repaired = await repairQuizResponseJson(
+          client,
+          model,
+          broken,
+          questionCount,
+          difficultyPreset,
+          AbortSignal.timeout(REPAIR_TIMEOUT_MS),
+        );
+        if (!repaired) break;
+        broken = repaired;
         parsed = repaired;
         sanitizedQuestions = sanitizeQuizQuestionsFromParsed(repaired, questionCount);
         const afterRepair = shapeOkResponse(sanitizedQuestions);
@@ -553,24 +598,17 @@ export async function POST(req: Request) {
 
   if (sanitizedQuestions.length >= 1 && sanitizedQuestions.length < questionCount) {
     try {
-      const k = sanitizedQuestions.length;
-      const balanced = rebalanceToTargets(sanitizedQuestions, targetOrder.slice(0, k));
-      const suffixTargets = targetOrder.slice(k);
-      const fillParsed = await generateFillInQuestions(
+      const filled = await tryFillRemainingQuestions(
         client,
         model,
         pdfForModel,
-        suffixTargets.length,
-        suffixTargets,
-        AbortSignal.timeout(FILL_TIMEOUT_MS),
+        sanitizedQuestions,
+        questionCount,
+        targetOrder,
       );
-      if (fillParsed) {
-        const filledPart = sanitizeQuizQuestionsFromParsed(fillParsed, suffixTargets.length);
-        if (filledPart.length === suffixTargets.length) {
-          const merged = [...balanced, ...filledPart];
-          const mergedOk = shapeOkResponse(merged);
-          if (mergedOk) return mergedOk;
-        }
+      if (filled) {
+        const mergedOk = shapeOkResponse(filled);
+        if (mergedOk) return mergedOk;
       }
     } catch (fillErr) {
       console.warn("[generate-quiz] fill-in path failed", fillErr);
@@ -579,7 +617,7 @@ export async function POST(req: Request) {
 
   if (sanitizedQuestions.length !== questionCount) {
     try {
-      const retrySys = `${buildQuizSystemPrompt(questionCount, difficultyPreset)}\n\nKRİTİK: Önceki yanıt soru sayısı veya şema için yetersiz kaldı. Bu yanıtta mutlaka tam ${questionCount} soru, doğru difficulty dağılımı ve eksiksiz JSON üret.`;
+      const retrySys = `${buildQuizSystemPrompt(questionCount, difficultyPreset)}\n\nKRİTİK: Önceki yanıtta soru sayısı veya şema eksik kaldı. Bu yanıtta mutlaka tam ${questionCount} soru ve eksiksiz JSON üret; tüm soruların difficulty alanını geçici olarak \"medium\" yapabilirsin (sunucu hedefe çeker).`;
       const retryRaw = await runOpenAiQuizJson(
         client,
         model,
@@ -602,6 +640,25 @@ export async function POST(req: Request) {
       }
     } catch (retryErr) {
       console.warn("[generate-quiz] retry generation failed", retryErr);
+    }
+  }
+
+  if (sanitizedQuestions.length >= 1 && sanitizedQuestions.length < questionCount) {
+    try {
+      const filled2 = await tryFillRemainingQuestions(
+        client,
+        model,
+        pdfForModel,
+        sanitizedQuestions,
+        questionCount,
+        targetOrder,
+      );
+      if (filled2) {
+        const ok2 = shapeOkResponse(filled2);
+        if (ok2) return ok2;
+      }
+    } catch (e) {
+      console.warn("[generate-quiz] post-retry fill failed", e);
     }
   }
 

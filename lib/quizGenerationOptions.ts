@@ -157,29 +157,19 @@ export function difficultyRuleForModelPrompt(
   preset: QuizDifficultyPreset,
   n: number,
 ): string {
-  if (preset !== "mixed") {
-    return `Zorluk: Tüm ${n} sorunun "difficulty" alanı tam olarak "${preset}" olmalı.`;
-  }
-  const t = mixedDifficultyCounts(n);
-  return (
-    `Zorluk dağılımı (tam olarak uygula; sıra önemli değil): ` +
-    `${t.easy} soru "easy" (göreceli daha erişilebilir kavram; düz ezberden kaçın), ` +
-    `${t.medium} soru "medium", ` +
-    `${t.hard} soru "hard" (analiz/uygulama ağırlıklı).`
-  );
+  const presetHint =
+    preset === "mixed"
+      ? "Karışık zorluk (kolay/orta/zor) hedeflenir; gerekirse tüm sorularda geçici olarak \"medium\" kullanabilirsin — hedef dağılım sunucuda otomatik atanır."
+      : `Tercih zorluk: "${preset}". Uymakta zorlanırsan "medium" yaz; sunucu "${preset}"e çeker.`;
+  return `${presetHint} Öncelik: tam ${n} eksiksiz soru, geçerli JSON ve kaliteli şıklar.`;
 }
 
 export function verificationLineForModel(
   preset: QuizDifficultyPreset,
   n: number,
 ): string {
-  if (preset !== "mixed") {
-    return `tam ${n} soru ve her birinde difficulty yalnızca "${preset}".`;
-  }
-  const t = mixedDifficultyCounts(n);
-  return (
-    `tam ${n} soru ve difficulty sayıları: tam ${t.easy} "easy", tam ${t.medium} "medium", tam ${t.hard} "hard".`
-  );
+  void preset;
+  return `Tam ${n} soru; her soruda question, dört options, correctAnswerIndex 0-3, difficulty (easy|medium|hard), explanation. Eksik soru bırakma; difficulty sayıları sunucuda hedefe göre düzeltilebilir.`;
 }
 
 export function buildQuizSystemPrompt(
@@ -226,7 +216,7 @@ JSON şablonu (birebir anahtarlar):
 
 Kurallar:
 - correctAnswerIndex yalnızca 0, 1, 2 veya 3 olabilir.
-- difficulty yalnızca "easy", "medium" veya "hard" olabilir.
+- difficulty: "easy", "medium" veya "hard" (hepsi medium da olabilir).
 - explanation her soruda anlamlı, boş olmayan bir metin olmalıdır.
 - Üretimden sonra kontrol edilecek: ${verify}
 `.trim();
@@ -241,8 +231,9 @@ export function buildRepairSystemPrompt(
     "Görev: Verilen quiz JSON şemasını düzelt.",
     "Çıktı: yalnızca geçerli JSON; markdown veya açıklama metni yok.",
     `Koşullar: ${verify}`,
-    `Her soruda question, options (4 string), correctAnswerIndex 0-3, difficulty, explanation.`,
-    "correctAnswerIndex değerleri sorular arasında 0,1,2,3 üzerinde mümkün olduğunca çeşitlensin; explanation konuma (A/B) atıf yapmasın.",
+    `Her soruda question, options (en az 4 string; fazlaysa ilk 4 alınır), correctAnswerIndex 0-3, difficulty, explanation.`,
+    "correctAnswerIndex değerleri çeşitlensin; explanation A/B/C/D veya şık sırasına atıf yapmasın.",
+    "difficulty dağılımı tam tutmayabilir; tüm soruları medium yapıp tamamlamak kabul — sunucu hedefe çeker.",
     "Eksik geçerli soru varsa ders içeriğine uygun üret; fazla veya geçersiz girdileri ele.",
   ].join(" ");
 }
