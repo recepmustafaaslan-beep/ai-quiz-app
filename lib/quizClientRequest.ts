@@ -5,6 +5,7 @@ import {
   QuizErrorCode,
 } from "@/lib/quizErrors";
 import type { QuizDifficultyPreset } from "@/lib/quizGenerationOptions";
+import { extractPdfTextInBrowser } from "@/lib/client/extractPdfTextInBrowser";
 
 const CLIENT_FETCH_TIMEOUT_MS = 120_000;
 
@@ -193,6 +194,18 @@ export async function requestGenerateQuizWithPdfFile(
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
+
+    // If platform rejects multipart body as too large, fallback to browser-side extract → JSON text request.
+    if (res.status === 413) {
+      try {
+        const text = await extractPdfTextInBrowser(file);
+        if (text && text.trim().length > 0) {
+          return await requestQuizGeneration(text, options);
+        }
+      } catch {
+        // if fallback fails, continue with normal error parsing
+      }
+    }
 
     const raw = await readFetchBodyAsUtf8(res);
     return parseQuizGenerateResponse(res, raw);
