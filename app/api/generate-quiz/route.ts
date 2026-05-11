@@ -10,6 +10,7 @@ import {
   isLikelyInvalidPdfError,
 } from "@/lib/quizErrors";
 import { mapOpenAISdkErrorToCode } from "@/lib/server/openaiQuizErrorMap";
+import { bufferHasPdfSignature, extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";
@@ -109,18 +110,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       }
       const buffer = read.buffer;
 
-      const pdfMod = await import("@/lib/server/pdfParseExtract").catch((e) => {
-        console.error("[generate-quiz] pdf module load failed", e);
-        return null;
-      });
-      if (!pdfMod) {
-        return {
-          ok: false,
-          response: jsonError(QuizErrorCode.PDF_READ_FAILED, 503),
-        };
-      }
-
-      const pdfSig = pdfMod.bufferHasPdfSignature(buffer);
+      const pdfSig = bufferHasPdfSignature(buffer);
       const mime = (type || "").toLowerCase();
       const clearlyWrongMedia =
         mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/");
@@ -133,7 +123,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
 
       let raw: string;
       try {
-        raw = await pdfMod.extractPdfTextWithPdfParse(buffer);
+        raw = await extractPdfTextWithPdfParse(buffer);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         const code = isLikelyInvalidPdfError(msg) ? QuizErrorCode.PDF_INVALID : QuizErrorCode.PDF_READ_FAILED;
@@ -141,7 +131,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
       }
 
       if (!raw) {
-        return { ok: false, response: jsonError(QuizErrorCode.PDF_READ_FAILED, 400) };
+        return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
       }
 
       const text = preprocessPdfText(raw);

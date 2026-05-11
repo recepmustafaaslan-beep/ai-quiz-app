@@ -1,4 +1,5 @@
 import { PDFParse } from "pdf-parse";
+import { extractPdfTextWithPdfJs } from "@/lib/server/extractPdfTextPdfJs";
 
 /** İlk baytlar %PDF ise gerçek PDF ikilisi kabul edilir (iOS sık octet-stream gönderir). */
 export function bufferHasPdfSignature(buffer: Buffer): boolean {
@@ -6,18 +7,27 @@ export function bufferHasPdfSignature(buffer: Buffer): boolean {
 }
 
 /**
- * Sunucuda PDF ikilisinden düz metin çıkarır (pdf-parse v2).
- *
- * Not: `import pdf from "pdf-parse"` eski v1 kalıbıdır; v2’de yalnızca
- * `{ PDFParse }` named export vardır — `new PDFParse({ data }).getText()`.
+ * Sunucuda PDF ikilisinden düz metin çıkarır (önce pdf-parse v2, boş/hata durumunda pdfjs yedeği).
  */
 export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
-  const data = new Uint8Array(buffer);
-  const parser = new PDFParse({ data });
+  let fromParse = "";
   try {
-    const result = await parser.getText();
-    return (result.text ?? "").trim();
-  } finally {
-    await parser.destroy();
+    const data = new Uint8Array(buffer);
+    const parser = new PDFParse({ data });
+    try {
+      const result = await parser.getText();
+      fromParse = (result.text ?? "").trim();
+    } finally {
+      await parser.destroy();
+    }
+  } catch (e) {
+    console.warn("[pdfParseExtract] PDFParse failed, will try pdfjs", e);
   }
+
+  if (fromParse.length > 0) {
+    return fromParse;
+  }
+
+  const fromJs = await extractPdfTextWithPdfJs(buffer);
+  return fromJs.trim();
 }
