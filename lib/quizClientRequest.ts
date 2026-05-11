@@ -140,7 +140,8 @@ export function parseQuizGenerateResponse(
 
   if (!res.ok) {
     const codeRaw = data.code;
-    const codeStr = typeof codeRaw === "string" ? codeRaw : codeRaw != null ? String(codeRaw) : "";
+    const codeStr =
+      typeof codeRaw === "string" ? codeRaw.trim() : codeRaw != null ? String(codeRaw).trim() : "";
     if (codeStr && isQuizErrorCode(codeStr)) {
       return { ok: false, message: getQuizUserMessage(codeStr) };
     }
@@ -231,7 +232,11 @@ export async function requestPdfTextExtract(
     if (!res.ok) {
       const extCodeRaw = data.code;
       const extCodeStr =
-        typeof extCodeRaw === "string" ? extCodeRaw : extCodeRaw != null ? String(extCodeRaw) : "";
+        typeof extCodeRaw === "string"
+          ? extCodeRaw.trim()
+          : extCodeRaw != null
+            ? String(extCodeRaw).trim()
+            : "";
       if (extCodeStr && isQuizErrorCode(extCodeStr)) {
         return { ok: false, message: getQuizUserMessage(extCodeStr) };
       }

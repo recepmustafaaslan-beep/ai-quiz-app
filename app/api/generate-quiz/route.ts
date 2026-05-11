@@ -58,6 +58,42 @@ function statusForOpenAIError(code: QuizErrorCodeType): number {
   return 502;
 }
 
+/** OpenAI SDK v6: `message.content` string | parça dizisi | null olabilir */
+function extractAssistantCompletionText(message: {
+  content?: string | null | Array<{ type?: string; text?: string; refusal?: string }>;
+  refusal?: string | null;
+} | undefined): { text: string; refusal: string | null } {
+  if (!message) {
+    return { text: "", refusal: null };
+  }
+  const topRefusal =
+    typeof message.refusal === "string" && message.refusal.trim().length > 0
+      ? message.refusal.trim()
+      : null;
+  const c = message.content;
+  if (c == null) {
+    return { text: "", refusal: topRefusal };
+  }
+  if (typeof c === "string") {
+    return { text: c, refusal: topRefusal };
+  }
+  if (Array.isArray(c)) {
+    const texts: string[] = [];
+    let partRefusal: string | null = null;
+    for (const part of c) {
+      if (!part || typeof part !== "object") continue;
+      if (part.type === "text" && typeof part.text === "string") {
+        texts.push(part.text);
+      }
+      if (part.type === "refusal" && typeof part.refusal === "string" && part.refusal.trim()) {
+        partRefusal = part.refusal.trim();
+      }
+    }
+    return { text: texts.join(""), refusal: topRefusal ?? partRefusal };
+  }
+  return { text: "", refusal: topRefusal };
+}
+
 async function resolvePdfTextFromRequest(req: Request): Promise<
   { ok: true; pdfText: string } | { ok: false; response: Response }
 > {
@@ -190,15 +226,15 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
 
 export async function POST(req: Request) {
   try {
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return jsonError(QuizErrorCode.SERVER_CONFIG, 500);
+  }
+
   const resolved = await resolvePdfTextFromRequest(req);
   if (!resolved.ok) {
     return resolved.response;
   }
   const { pdfText } = resolved;
-
-  if (!process.env.OPENAI_API_KEY) {
-    return jsonError(QuizErrorCode.SERVER_CONFIG, 500);
-  }
 
   const systemPrompt = `
 Rolün: Sen, yükseköğretimde uzman bir üniversite eğitmenisin.
@@ -271,8 +307,18 @@ Kurallar:
     );
   }
 
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
+  const { text: rawContent, refusal } = extractAssistantCompletionText(completion.choices[0]?.message);
+  if (refusal) {
+    return NextResponse.json(
+      {
+        code: QuizErrorCode.MODEL_REFUSED,
+        error: getQuizUserMessage(QuizErrorCode.MODEL_REFUSED),
+      },
+      { status: 502 },
+    );
+  }
+  const raw = rawContent;
+  if (!raw?.trim()) {
     return NextResponse.json(
       { code: QuizErrorCode.MODEL_EMPTY, error: getQuizUserMessage(QuizErrorCode.MODEL_EMPTY) },
       { status: 502 },
@@ -360,7 +406,10 @@ Kurallar:
 
   return NextResponse.json({ questions: sanitizedQuestions });
   } catch (error) {
-    console.error("[generate-quiz] POST unhandled", error);
+    console.error(
+      "[generate-quiz] POST unhandled",
+      error instanceof Error ? { message: error.message, name: error.name, stack: error.stack } : error,
+    );
 
     return NextResponse.json(
       {

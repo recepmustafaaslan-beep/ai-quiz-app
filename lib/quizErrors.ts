@@ -23,6 +23,7 @@ export const QuizErrorCode = {
   OPENAI_UNKNOWN: "OPENAI_UNKNOWN",
   MODEL_JSON_INVALID: "MODEL_JSON_INVALID",
   MODEL_EMPTY: "MODEL_EMPTY",
+  MODEL_REFUSED: "MODEL_REFUSED",
   MODEL_SHAPE_INVALID: "MODEL_SHAPE_INVALID",
   CLIENT_UNEXPECTED: "CLIENT_UNEXPECTED",
 } as const;
@@ -70,6 +71,8 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
     "Model çıktısı biçim hatası verdi. Tekrar üretmeyi deneyin.",
   [QuizErrorCode.MODEL_EMPTY]:
     "Model boş yanıt döndürdü. Tekrar deneyin.",
+  [QuizErrorCode.MODEL_REFUSED]:
+    "Model bu içerik için yanıt üretmeyi reddetti. Farklı bir PDF veya daha kısa bir metin deneyin.",
   [QuizErrorCode.MODEL_SHAPE_INVALID]:
     "Model beklenen soru sayısı veya zorluk dağılımını üretemedi. Tekrar deneyin.",
   [QuizErrorCode.CLIENT_UNEXPECTED]:
@@ -81,7 +84,8 @@ export function getQuizUserMessage(code: QuizErrorCodeType): string {
 }
 
 export function isQuizErrorCode(value: string): value is QuizErrorCodeType {
-  return Object.values(QuizErrorCode).includes(value as QuizErrorCodeType);
+  const v = typeof value === "string" ? value.trim() : String(value).trim();
+  return Object.values(QuizErrorCode).includes(v as QuizErrorCodeType);
 }
 
 /** Vercel / CDN gibi katmanların HTTP kodlarına göre kullanıcı mesajı */
