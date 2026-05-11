@@ -25,12 +25,28 @@ const difficultyLabelTr: Record<Difficulty, string> = {
   hard: "Zor",
 };
 
-/** Zorluğa göre puan (doğru cevap başına) */
-const pointsPerDifficulty: Record<Difficulty, number> = {
-  easy: 10,
-  medium: 15,
-  hard: 25,
-};
+/** Toplam puan tavanı; her soru eşit ağırlık (kalan 1’er puan ilk sorulara dağıtılır) */
+const QUIZ_SCORE_MAX = 100;
+
+function buildEqualQuestionWeights(n: number): number[] {
+  if (n <= 0) return [];
+  const base = Math.floor(QUIZ_SCORE_MAX / n);
+  const rem = QUIZ_SCORE_MAX % n;
+  return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
+}
+
+function triggerDownload(filename: string, body: string, mime: string) {
+  const blob = new Blob([body], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 type Props = {
   questions: GeneratedQuestion[];
@@ -56,11 +72,11 @@ export default function GeneratedQuizExperience({ questions }: Props) {
 
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
-
-  const maxPointsTotal = useMemo(
-    () => questions.reduce((acc, q) => acc + pointsPerDifficulty[q.difficulty], 0),
-    [questions],
+  const [userAnswers, setUserAnswers] = useState<(number | null)[]>(() =>
+    questions.length ? Array.from({ length: questions.length }, () => null) : [],
   );
+
+  const questionWeights = useMemo(() => buildEqualQuestionWeights(total), [total]);
 
   const currentQuestion = questions[currentIdx];
   const isLast = total > 0 && currentIdx === total - 1;
@@ -150,6 +166,7 @@ export default function GeneratedQuizExperience({ questions }: Props) {
       setPoints(0);
       setRoundDone(null);
       pointsRef.current = 0;
+      setUserAnswers(Array.from({ length: questions.length }, () => null));
     });
   }, [questions]);
 
@@ -164,15 +181,73 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setPoints(0);
     scoreRef.current = 0;
     pointsRef.current = 0;
+    setUserAnswers(Array.from({ length: total }, () => null));
   };
+
+  const handleDownloadQuestionsJson = useCallback(() => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      format: "ai-quiz-questions",
+      scoring: { maxPoints: QUIZ_SCORE_MAX, rule: "equal_per_question" },
+      questions: questions.map((q) => ({
+        question: q.question,
+        options: [...q.options],
+        correctAnswerIndex: q.correctAnswerIndex,
+        difficulty: q.difficulty,
+        explanation: q.explanation,
+      })),
+    };
+    triggerDownload(
+      `quiz-sorular-${Date.now()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8",
+    );
+  }, [questions]);
+
+  const handleDownloadAttemptJson = useCallback(() => {
+    if (!roundDone) return;
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      format: "ai-quiz-attempt",
+      scoring: { maxPoints: QUIZ_SCORE_MAX, rule: "equal_per_question" },
+      result: {
+        correctCount: roundDone.score,
+        questionCount: roundDone.total,
+        points: roundDone.points,
+        maxPoints: roundDone.maxPoints,
+      },
+      userAnswers: userAnswers.map((a, i) => ({
+        questionIndex: i,
+        selectedOptionIndex: a,
+        correct: a === questions[i]?.correctAnswerIndex,
+      })),
+      questions: questions.map((q) => ({
+        question: q.question,
+        options: [...q.options],
+        correctAnswerIndex: q.correctAnswerIndex,
+        difficulty: q.difficulty,
+        explanation: q.explanation,
+      })),
+    };
+    triggerDownload(
+      `quiz-sonuc-${Date.now()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8",
+    );
+  }, [roundDone, questions, userAnswers]);
 
   const pickOption = (index: number) => {
     if (!playMode || answerPhase !== "idle" || !currentQuestion) return;
 
     setPickedIndex(index);
     setAnswerPhase("answered");
+    setUserAnswers((prev) => {
+      const next = prev.length === total ? [...prev] : Array.from({ length: total }, () => null);
+      next[currentIdx] = index;
+      return next;
+    });
     if (index === currentQuestion.correctAnswerIndex) {
-      const add = pointsPerDifficulty[currentQuestion.difficulty];
+      const add = questionWeights[currentIdx] ?? 0;
       setScore((s) => {
         const next = s + 1;
         scoreRef.current = next;
@@ -193,7 +268,7 @@ export default function GeneratedQuizExperience({ questions }: Props) {
         score: scoreRef.current,
         total,
         points: pointsRef.current,
-        maxPoints: maxPointsTotal,
+        maxPoints: QUIZ_SCORE_MAX,
       });
       setPlayMode(false);
       setCurrentIdx(0);
@@ -215,25 +290,34 @@ export default function GeneratedQuizExperience({ questions }: Props) {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Quiz</h2>
           <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
-            Doğru sayısı ve zorluğa göre puan; yanlışta kısa açıklama.
+            Her soru eşit puan ({QUIZ_SCORE_MAX} üzerinden); yanlışta kısa açıklama.
           </p>
-          {!playMode && !roundDone && maxPointsTotal > 0 && (
+          {!playMode && !roundDone && total > 0 && (
             <p className="mt-2 text-xs text-zinc-600">
               Maksimum puan:{" "}
-              <span className="font-medium text-zinc-400">{maxPointsTotal}</span> (Kolay 10 · Orta 15 · Zor 25)
+              <span className="font-medium text-zinc-400">{QUIZ_SCORE_MAX}</span> · zorluk puanı etkilemez
             </p>
           )}
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           {!playMode && !roundDone && (
-            <button
-              type="button"
-              onClick={startPlayMode}
-              className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3 text-sm font-semibold tracking-tight text-white shadow-[0_12px_40px_-12px_rgba(99,102,241,0.5)] transition duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_16px_48px_-8px_rgba(99,102,241,0.55)] active:scale-[0.98]"
-            >
-              <span className="relative z-10">Quizi başlat</span>
-              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-white/15 to-cyan-400/0 opacity-0 transition duration-500 group-hover:opacity-100" />
-            </button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                onClick={startPlayMode}
+                className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3 text-sm font-semibold tracking-tight text-white shadow-[0_12px_40px_-12px_rgba(99,102,241,0.5)] transition duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_16px_48px_-8px_rgba(99,102,241,0.55)] active:scale-[0.98]"
+              >
+                <span className="relative z-10">Quizi başlat</span>
+                <span className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-white/15 to-cyan-400/0 opacity-0 transition duration-500 group-hover:opacity-100" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadQuestionsJson}
+                className="rounded-2xl border border-white/[0.14] bg-white/[0.06] px-5 py-3 text-sm font-semibold text-zinc-100 shadow-inner transition duration-300 hover:border-emerald-400/35 hover:bg-emerald-500/10 hover:text-emerald-50"
+              >
+                Quiz&apos;i indir (JSON)
+              </button>
+            </div>
           )}
           {playMode && (
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -261,7 +345,7 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                     {points}
                     <span className="font-normal text-zinc-600">
                       {" "}
-                      / {maxPointsTotal}
+                      / {QUIZ_SCORE_MAX}
                     </span>
                   </p>
                 </div>
@@ -432,6 +516,13 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                 className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 shadow-lg transition duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
               >
                 Tekrar çöz
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadAttemptJson}
+                className="rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 transition duration-300 hover:border-emerald-300/50 hover:bg-emerald-500/25"
+              >
+                Sonucu indir (JSON)
               </button>
               <button
                 type="button"

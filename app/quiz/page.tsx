@@ -38,6 +38,20 @@ function readScoreHistoryFromStorage(): SavedScore[] {
   }
 }
 const difficulties: Difficulty[] = ["easy", "medium", "hard"];
+const CLASSIC_SCORE_MAX = 100;
+
+function downloadJsonFile(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 const difficultyLabel: Record<Difficulty, string> = {
   easy: "Kolay",
   medium: "Orta",
@@ -327,19 +341,63 @@ export default function QuizPage() {
                     {score} / {filteredQuestions.length}
                   </span>
                 </p>
+                <p className="mt-1 text-sm text-emerald-100/90">
+                  Puan (her soru eşit, {CLASSIC_SCORE_MAX} üzerinden):{" "}
+                  <span className="font-semibold text-white">
+                    {filteredQuestions.length > 0
+                      ? Math.round((score / filteredQuestions.length) * CLASSIC_SCORE_MAX)
+                      : 0}{" "}
+                    / {CLASSIC_SCORE_MAX}
+                  </span>
+                </p>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300">{resultMessage}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStarted(false);
-                    setCurrentIndex(0);
-                    setSelectedChoice(null);
-                    setAnswerStatus("idle");
-                  }}
-                  className="mt-6 rounded-xl border border-white/15 bg-white/[0.08] px-5 py-3 text-sm font-semibold text-white transition duration-300 hover:border-white/25 hover:bg-white/[0.12]"
-                >
-                  Kategoriye dön
-                </button>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const points100 =
+                        filteredQuestions.length > 0
+                          ? Math.round((score / filteredQuestions.length) * CLASSIC_SCORE_MAX)
+                          : 0;
+                      downloadJsonFile(`klasik-quiz-${Date.now()}.json`, {
+                        exportedAt: new Date().toISOString(),
+                        format: "classic-quiz",
+                        scoring: { maxPoints: CLASSIC_SCORE_MAX, rule: "equal_per_question" },
+                        category: selectedCategory,
+                        difficulty: selectedDifficulty,
+                        result: {
+                          correctCount: score,
+                          questionCount: filteredQuestions.length,
+                          points: points100,
+                          maxPoints: CLASSIC_SCORE_MAX,
+                        },
+                        questions: filteredQuestions.map((q) => ({
+                          id: q.id,
+                          category: q.category,
+                          difficulty: q.difficulty,
+                          prompt: q.prompt,
+                          choices: q.choices,
+                          answerIndex: q.answerIndex,
+                        })),
+                      });
+                    }}
+                    className="rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-5 py-3 text-sm font-semibold text-emerald-50 transition duration-300 hover:border-emerald-300/50 hover:bg-emerald-500/25"
+                  >
+                    Sonucu indir (JSON)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStarted(false);
+                      setCurrentIndex(0);
+                      setSelectedChoice(null);
+                      setAnswerStatus("idle");
+                    }}
+                    className="rounded-xl border border-white/15 bg-white/[0.08] px-5 py-3 text-sm font-semibold text-white transition duration-300 hover:border-white/25 hover:bg-white/[0.12]"
+                  >
+                    Kategoriye dön
+                  </button>
+                </div>
               </section>
             )}
 
@@ -354,6 +412,13 @@ export default function QuizPage() {
                     >
                       <span className="font-semibold text-white">
                         {entry.score} / {entry.total}
+                        <span className="ml-1.5 font-normal text-zinc-400">
+                          (
+                          {entry.total > 0
+                            ? Math.round((entry.score / entry.total) * CLASSIC_SCORE_MAX)
+                            : 0}
+                          /{CLASSIC_SCORE_MAX})
+                        </span>
                       </span>
                       <span className="text-xs text-zinc-500">
                         {entry.category} / {difficultyLabel[entry.difficulty]} — {entry.date}
