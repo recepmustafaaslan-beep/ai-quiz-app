@@ -11,6 +11,8 @@ import { extractPdfTextWithPdfParse } from "@/lib/server/pdfParseExtract";
 
 export const runtime = "nodejs";
 
+export const maxDuration = 60;
+
 /** pdf-parse v2; eski v1 `pdf(buffer)` imzasına yakın kullanım */
 async function pdf(buffer: Buffer): Promise<{ text: string }> {
   const text = await extractPdfTextWithPdfParse(buffer);

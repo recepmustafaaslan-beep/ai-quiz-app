@@ -7,7 +7,7 @@ import QuizGeneratingOverlay from "@/components/QuizGeneratingOverlay";
 import GeneratedQuizExperience, {
   type GeneratedQuestion,
 } from "@/components/GeneratedQuizExperience";
-import { parseQuizGenerateResponse } from "@/lib/quizClientRequest";
+import { parseQuizGenerateResponse, requestGenerateQuizWithPdfFile } from "@/lib/quizClientRequest";
 import {
   getQuizUserMessage,
   QuizErrorCode,
@@ -69,15 +69,8 @@ export default function Home() {
         return;
       }
 
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const res = await fetch("/api/generate-quiz", {
-        method: "POST",
-        body: formData,
-      });
-      const raw = await res.text();
-      applyQuizApiResult(parseQuizGenerateResponse(res, raw));
+      const result = await requestGenerateQuizWithPdfFile(selectedFile);
+      applyQuizApiResult(result);
     } catch {
       setErrorMessage(getQuizUserMessage(QuizErrorCode.CLIENT_UNEXPECTED));
     } finally {

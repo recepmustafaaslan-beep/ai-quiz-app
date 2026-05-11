@@ -49,7 +49,7 @@ const MESSAGES: Record<QuizErrorCodeType, string> = {
   [QuizErrorCode.API_BAD_RESPONSE]:
     "Sunucudan beklenmeyen bir yanıt alındı. Lütfen tekrar deneyin.",
   [QuizErrorCode.API_JSON_PARSE]:
-    "Sunucu yanıtı işlenemedi. Lütfen tekrar deneyin.",
+    "Sunucu yanıtı okunamadı. Bağlantıyı kontrol edin; mobil veride veya sunucu yoğunluğunda olabilir. Bir süre sonra tekrar deneyin.",
   [QuizErrorCode.BODY_INVALID]:
     "İstek geçersiz. Sayfayı yenileyip tekrar deneyin.",
   [QuizErrorCode.SERVER_CONFIG]:

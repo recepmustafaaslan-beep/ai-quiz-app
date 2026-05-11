@@ -7,7 +7,7 @@ import {
   QuizErrorCode,
   QUIZ_UPLOAD_LIMITS,
 } from "@/lib/quizErrors";
-import { parseQuizGenerateResponse, type QuizQuestionPayload } from "@/lib/quizClientRequest";
+import { requestGenerateQuizWithPdfFile, type QuizQuestionPayload } from "@/lib/quizClientRequest";
 
 type PdfUploadDropzoneProps = {
   onFileSelect: (file: File | null) => void;
@@ -49,16 +49,8 @@ export default function PdfUploadDropzone({
       void (async () => {
         onGenerateQuizLoading?.(true);
         try {
-          const formData = new FormData();
-          formData.append("file", pickedFile);
-
-          const res = await fetch("/api/generate-quiz", {
-            method: "POST",
-            body: formData,
-          });
-
-          const raw = await res.text();
-          onGenerateQuizResult(parseQuizGenerateResponse(res, raw));
+          const result = await requestGenerateQuizWithPdfFile(pickedFile);
+          onGenerateQuizResult(result);
         } catch {
           onGenerateQuizResult({
             ok: false,

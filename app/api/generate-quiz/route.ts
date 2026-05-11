@@ -15,6 +15,13 @@ import { readUploadFileBuffer } from "@/lib/server/readUploadFileBuffer";
 
 export const runtime = "nodejs";
 
+/**
+ * Üretimde (Vercel dahil) işlev ~60 sn ile sınırlı; daha uzun sürerse platform isteği keser ve
+ * çoğunlukla HTML döner → istemci "JSON işlenemedi" görür. Sabit export Next segment kuralları için gerekli.
+ * Daha uzun süre: Vercel Pro + panelde Function Duration ve bu değeri artırın.
+ */
+export const maxDuration = 60;
+
 type Difficulty = "easy" | "medium" | "hard";
 
 type QuizQuestion = {
@@ -34,7 +41,8 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const OPENAI_TIMEOUT_MS = 120_000;
+/** Üretimde maxDuration (60s) içinde kal; geliştirmede daha uzun model beklemesi için. */
+const OPENAI_TIMEOUT_MS = process.env.NODE_ENV === "development" ? 120_000 : 50_000;
 
 function jsonError(code: QuizErrorCodeType, status: number) {
   return NextResponse.json({ code, error: getQuizUserMessage(code) }, { status });
