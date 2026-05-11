@@ -17,7 +17,7 @@ export default function QuizGeneratingOverlay({ open }: Props) {
 
   useEffect(() => {
     if (!open) {
-      setMessageIndex(0);
+      void Promise.resolve().then(() => setMessageIndex(0));
       return;
     }
 

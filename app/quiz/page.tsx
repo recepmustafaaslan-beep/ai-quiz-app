@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import questionData from "@/data/questions.json";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -25,6 +25,18 @@ type SavedScore = {
 
 const questions = questionData as Question[];
 const SCORE_HISTORY_KEY = "quiz-score-history";
+
+function readScoreHistoryFromStorage(): SavedScore[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(SCORE_HISTORY_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as SavedScore[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 const difficulties: Difficulty[] = ["easy", "medium", "hard"];
 const difficultyLabel: Record<Difficulty, string> = {
   easy: "Kolay",
@@ -40,7 +52,7 @@ export default function QuizPage() {
   const [score, setScore] = useState(0);
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null);
   const [answerStatus, setAnswerStatus] = useState<"idle" | "correct" | "wrong">("idle");
-  const [scoreHistory, setScoreHistory] = useState<SavedScore[]>([]);
+  const [scoreHistory, setScoreHistory] = useState<SavedScore[]>(readScoreHistoryFromStorage);
 
   const categories = useMemo(
     () => Array.from(new Set(questions.map((question) => question.category))),
@@ -68,19 +80,6 @@ export default function QuizPage() {
     if (ratio >= 0.6) return "Çok iyi! Bir tur daha ile tam isabet gelir.";
     return "Güzel başlangıç. Bir tur daha deneyebilirsin.";
   }, [score, filteredQuestions.length]);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SCORE_HISTORY_KEY);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as SavedScore[];
-      if (Array.isArray(parsed)) {
-        setScoreHistory(parsed);
-      }
-    } catch {
-      setScoreHistory([]);
-    }
-  }, []);
 
   const saveScore = (newScore: number) => {
     if (!selectedCategory || !selectedDifficulty) return;

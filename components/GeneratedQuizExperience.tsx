@@ -81,8 +81,10 @@ export default function GeneratedQuizExperience({ questions }: Props) {
 
   useEffect(() => {
     if (!roundDone) {
-      setShareUrl(null);
-      setShareFeedback(null);
+      void Promise.resolve().then(() => {
+        setShareUrl(null);
+        setShareFeedback(null);
+      });
     }
   }, [roundDone]);
 
@@ -134,14 +136,16 @@ export default function GeneratedQuizExperience({ questions }: Props) {
   }, [roundDone, questions]);
 
   useEffect(() => {
-    setPlayMode(false);
-    setCurrentIdx(0);
-    setAnswerPhase("idle");
-    setPickedIndex(null);
-    setScore(0);
-    setPoints(0);
-    setRoundDone(null);
-    pointsRef.current = 0;
+    void Promise.resolve().then(() => {
+      setPlayMode(false);
+      setCurrentIdx(0);
+      setAnswerPhase("idle");
+      setPickedIndex(null);
+      setScore(0);
+      setPoints(0);
+      setRoundDone(null);
+      pointsRef.current = 0;
+    });
   }, [questions]);
 
   const startPlayMode = () => {

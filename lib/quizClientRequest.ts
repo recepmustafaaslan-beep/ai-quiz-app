@@ -71,7 +71,7 @@ function tryParseApiJson(raw: string): ApiJson | null {
 
   const fence = s.indexOf("```");
   if (fence >= 0) {
-    let inner = s.slice(fence + 3).replace(/^\s*json\s*/i, "").trimStart();
+    const inner = s.slice(fence + 3).replace(/^\s*json\s*/i, "").trimStart();
     const close = inner.indexOf("```");
     if (close >= 0) {
       const fenced = parseApiJsonObject(inner.slice(0, close).trim());

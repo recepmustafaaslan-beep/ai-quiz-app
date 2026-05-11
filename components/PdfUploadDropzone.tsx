@@ -68,10 +68,28 @@ export default function PdfUploadDropzone({
     onDrop,
     multiple: false,
     disabled,
+    /** Mobil Safari / WebView: FS Access API bazen dosyayı boş veya reddedilmiş gösterir */
+    useFsAccessApi: false,
+    /** `type` boş veya yanlış olsa bile `.pdf` uzantısını kabul et (iOS Dosyalar uygulaması) */
+    validator: (file) => {
+      const f = file as File;
+      const name = (f.name || "").toLowerCase();
+      if (name.endsWith(".pdf")) return null;
+      const t = (f.type || "").toLowerCase();
+      if (
+        t === "application/pdf" ||
+        t === "application/x-pdf" ||
+        t === "application/octet-stream" ||
+        t === "binary/octet-stream"
+      ) {
+        return null;
+      }
+      return { code: "file-invalid-type", message: "Yalnızca PDF seçilebilir." };
+    },
     accept: {
       "application/pdf": [".pdf"],
-      /** iOS / bazı tarayıcılar PDF’i octet-stream ile gönderir */
       "application/octet-stream": [".pdf"],
+      "application/x-pdf": [".pdf"],
     },
   });
 
@@ -92,7 +110,7 @@ export default function PdfUploadDropzone({
       {!minimal && (
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500/[0.07] via-transparent to-cyan-500/[0.05] opacity-0 transition duration-500 group-hover:opacity-100" />
       )}
-      <input {...getInputProps()} />
+      <input {...getInputProps({ accept: ".pdf,application/pdf,application/octet-stream" })} />
 
       <div
         className={

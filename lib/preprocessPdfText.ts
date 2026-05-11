@@ -96,7 +96,7 @@ function preprocessSinglePage(pageText: string): string {
   if (lines.length === 0) return "";
 
   const stripEnds = (arr: string[]) => {
-    let a = [...arr];
+    const a = [...arr];
     while (a.length > 0 && (isPageNumberLine(a[0]) || isLikelyFooterOrHeaderLine(a[0]))) {
       a.shift();
     }
