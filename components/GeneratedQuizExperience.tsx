@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildPaylasUrl,
+  encodeSharePayload,
+  type ShareQuizPayloadV1,
+} from "@/lib/shareQuizPayload";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -9,6 +14,8 @@ export type GeneratedQuestion = {
   options: [string, string, string, string];
   correctAnswerIndex: 0 | 1 | 2 | 3;
   difficulty: Difficulty;
+  /** Doğru cevap gerekçesi; yanlış veya süre bitince gösterilir */
+  explanation: string;
 };
 
 const difficultySeconds: Record<Difficulty, number> = {
@@ -23,6 +30,13 @@ const difficultyLabelTr: Record<Difficulty, string> = {
   hard: "Zor",
 };
 
+/** Zorluğa göre puan (doğru cevap başına) */
+const pointsPerDifficulty: Record<Difficulty, number> = {
+  easy: 10,
+  medium: 15,
+  hard: 25,
+};
+
 type Props = {
   questions: GeneratedQuestion[];
 };
@@ -30,6 +44,7 @@ type Props = {
 export default function GeneratedQuizExperience({ questions }: Props) {
   const total = questions.length;
   const scoreRef = useRef(0);
+  const pointsRef = useRef(0);
 
   const [playMode, setPlayMode] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -37,7 +52,22 @@ export default function GeneratedQuizExperience({ questions }: Props) {
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [score, setScore] = useState(0);
-  const [roundDone, setRoundDone] = useState<{ score: number; total: number } | null>(null);
+  const [points, setPoints] = useState(0);
+  const [roundDone, setRoundDone] = useState<{
+    score: number;
+    total: number;
+    points: number;
+    maxPoints: number;
+  } | null>(null);
+
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+
+  const maxPointsTotal = useMemo(
+    () => questions.reduce((acc, q) => acc + pointsPerDifficulty[q.difficulty], 0),
+    [questions],
+  );
 
   const currentQuestion = questions[currentIdx];
   const currentSeconds = currentQuestion ? difficultySeconds[currentQuestion.difficulty] : 0;
@@ -54,13 +84,73 @@ export default function GeneratedQuizExperience({ questions }: Props) {
   }, [score]);
 
   useEffect(() => {
+    pointsRef.current = points;
+  }, [points]);
+
+  useEffect(() => {
+    if (!roundDone) {
+      setShareUrl(null);
+      setShareFeedback(null);
+    }
+  }, [roundDone]);
+
+  const handleShareFriend = useCallback(async () => {
+    if (!roundDone) return;
+    setShareBusy(true);
+    setShareFeedback(null);
+    setShareUrl(null);
+    try {
+      const payload: ShareQuizPayloadV1 = {
+        v: 1,
+        questions: questions.map((q) => ({
+          question: q.question,
+          options: [...q.options] as [string, string, string, string],
+          correctAnswerIndex: q.correctAnswerIndex,
+          difficulty: q.difficulty,
+          explanation: q.explanation ?? "",
+        })),
+        result: {
+          score: roundDone.score,
+          total: roundDone.total,
+          points: roundDone.points,
+          maxPoints: roundDone.maxPoints,
+        },
+      };
+      const token = await encodeSharePayload(payload);
+      const url = buildPaylasUrl(window.location.origin, token);
+      setShareUrl(url);
+      const long = url.length > 60_000;
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareFeedback(
+          long
+            ? "Link panoya kopyalandı (oldukça uzun; sorun olursa aşağıdan seçerek kopyala)."
+            : "Link panoya kopyalandı. Arkadaşına gönder!",
+        );
+      } catch {
+        setShareFeedback(
+          long
+            ? "Panoya kopyalanamadı. Link uzun; aşağıdan parça parça seçebilirsin."
+            : "Panoya kopyalanamadı. Aşağıdaki linki elle seçip kopyala.",
+        );
+      }
+    } catch {
+      setShareFeedback("Paylaşım oluşturulamadı. Tekrar dene.");
+    } finally {
+      setShareBusy(false);
+    }
+  }, [roundDone, questions]);
+
+  useEffect(() => {
     setPlayMode(false);
     setCurrentIdx(0);
     setAnswerPhase("idle");
     setPickedIndex(null);
     setTimeLeft(0);
     setScore(0);
+    setPoints(0);
     setRoundDone(null);
+    pointsRef.current = 0;
   }, [questions]);
 
   useEffect(() => {
@@ -89,6 +179,9 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setAnswerPhase("idle");
     setPickedIndex(null);
     setScore(0);
+    setPoints(0);
+    scoreRef.current = 0;
+    pointsRef.current = 0;
     setTimeLeft(difficultySeconds[questions[0].difficulty]);
   };
 
@@ -98,14 +191,29 @@ export default function GeneratedQuizExperience({ questions }: Props) {
     setPickedIndex(index);
     setAnswerPhase("answered");
     if (index === currentQuestion.correctAnswerIndex) {
-      setScore((s) => s + 1);
+      const add = pointsPerDifficulty[currentQuestion.difficulty];
+      setScore((s) => {
+        const next = s + 1;
+        scoreRef.current = next;
+        return next;
+      });
+      setPoints((p) => {
+        const next = p + add;
+        pointsRef.current = next;
+        return next;
+      });
     }
   };
 
   const goNext = () => {
     if (!currentQuestion) return;
     if (isLast) {
-      setRoundDone({ score: scoreRef.current, total });
+      setRoundDone({
+        score: scoreRef.current,
+        total,
+        points: pointsRef.current,
+        maxPoints: maxPointsTotal,
+      });
       setPlayMode(false);
       setCurrentIdx(0);
       setAnswerPhase("idle");
@@ -124,36 +232,64 @@ export default function GeneratedQuizExperience({ questions }: Props) {
 
   return (
     <section className="mx-auto w-full max-w-2xl">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Quiz</h2>
           <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
-            Şık seç, geri bildirimi gör, sonraki soruya geç.
+            Doğru sayısı ve zorluğa göre puan; yanlışta kısa açıklama.
           </p>
+          {!playMode && !roundDone && maxPointsTotal > 0 && (
+            <p className="mt-2 text-xs text-zinc-600">
+              Maksimum puan:{" "}
+              <span className="font-medium text-zinc-400">{maxPointsTotal}</span> (Kolay 10 · Orta 15 · Zor 25)
+            </p>
+          )}
         </div>
-        {!playMode && !roundDone && (
-          <button
-            type="button"
-            onClick={startPlayMode}
-            className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3 text-sm font-semibold tracking-tight text-white shadow-[0_12px_40px_-12px_rgba(99,102,241,0.5)] transition duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_16px_48px_-8px_rgba(99,102,241,0.55)] active:scale-[0.98]"
-          >
-            <span className="relative z-10">Quizi başlat</span>
-            <span className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-white/15 to-cyan-400/0 opacity-0 transition duration-500 group-hover:opacity-100" />
-          </button>
-        )}
-        {playMode && (
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 shadow-inner shadow-white/5 backdrop-blur-md transition duration-300 hover:border-white/15">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/25">
-              {score}
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          {!playMode && !roundDone && (
+            <button
+              type="button"
+              onClick={startPlayMode}
+              className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3 text-sm font-semibold tracking-tight text-white shadow-[0_12px_40px_-12px_rgba(99,102,241,0.5)] transition duration-300 ease-out hover:scale-[1.02] hover:shadow-[0_16px_48px_-8px_rgba(99,102,241,0.55)] active:scale-[0.98]"
+            >
+              <span className="relative z-10">Quizi başlat</span>
+              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-white/15 to-cyan-400/0 opacity-0 transition duration-500 group-hover:opacity-100" />
+            </button>
+          )}
+          {playMode && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={startPlayMode}
+                className="rounded-xl border border-white/[0.12] bg-white/[0.04] px-3 py-2 text-xs font-medium text-zinc-300 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-100"
+              >
+                Tekrar çöz
+              </button>
+              <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 shadow-inner shadow-white/5 backdrop-blur-md">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/25">
+                  {score}
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Skor</p>
+                  <p className="text-sm font-semibold tabular-nums text-white">
+                    {score} <span className="font-normal text-zinc-600">/</span> {total}
+                  </p>
+                </div>
+                <div className="h-10 w-px bg-white/[0.08]" aria-hidden />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Puan</p>
+                  <p className="text-sm font-semibold tabular-nums text-amber-200/95">
+                    {points}
+                    <span className="font-normal text-zinc-600">
+                      {" "}
+                      / {maxPointsTotal}
+                    </span>
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Skor</p>
-              <p className="text-sm font-semibold tabular-nums text-white">
-                {score} <span className="font-normal text-zinc-600">/</span> {total}
-              </p>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="mt-8">
@@ -277,8 +413,17 @@ export default function GeneratedQuizExperience({ questions }: Props) {
               ) : (
                 <p className="text-sm font-semibold text-rose-300">Yanlış cevap.</p>
               )}
+              {(pickedIndex === null || pickedIndex !== currentQuestion.correctAnswerIndex) &&
+                currentQuestion.explanation && (
+                  <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-200/90">
+                      Neden doğru cevap bu?
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-zinc-200/95">{currentQuestion.explanation}</p>
+                  </div>
+                )}
               {(pickedIndex === null || pickedIndex !== currentQuestion.correctAnswerIndex) && (
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-3 text-sm text-slate-400">
                   Doğru şık:{" "}
                   <span className="font-semibold text-emerald-300">
                     {String.fromCharCode(65 + currentQuestion.correctAnswerIndex)}.{" "}
@@ -317,6 +462,12 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                 {Math.round((roundDone.score / roundDone.total) * 100)}%
               </span>
             </p>
+            <p className="relative mt-1 text-sm text-slate-400">
+              Toplam puan:{" "}
+              <span className="font-semibold text-amber-200">
+                {roundDone.points} / {roundDone.maxPoints}
+              </span>
+            </p>
 
             <div className="relative mt-8 flex flex-wrap justify-center gap-3">
               <button
@@ -324,7 +475,15 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                 onClick={startPlayMode}
                 className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 shadow-lg transition duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
               >
-                Tekrar dene
+                Tekrar çöz
+              </button>
+              <button
+                type="button"
+                onClick={handleShareFriend}
+                disabled={shareBusy}
+                className="rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-5 py-2.5 text-sm font-semibold text-cyan-100 transition duration-300 hover:border-cyan-300/50 hover:bg-cyan-500/25 disabled:cursor-wait disabled:opacity-60"
+              >
+                {shareBusy ? "Link hazırlanıyor…" : "Arkadaşına gönder"}
               </button>
               <button
                 type="button"
@@ -334,6 +493,24 @@ export default function GeneratedQuizExperience({ questions }: Props) {
                 Kapat
               </button>
             </div>
+
+            {shareFeedback && (
+              <p className="relative mt-4 text-center text-xs leading-relaxed text-zinc-400">{shareFeedback}</p>
+            )}
+            {shareUrl && (
+              <div className="relative mt-4 text-left">
+                <label htmlFor="share-quiz-url" className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Paylaşım linki
+                </label>
+                <input
+                  id="share-quiz-url"
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.target.select()}
+                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] leading-relaxed text-zinc-300 outline-none ring-0 focus:border-cyan-500/40"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

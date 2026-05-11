@@ -7,8 +7,7 @@ import QuizGeneratingOverlay from "@/components/QuizGeneratingOverlay";
 import GeneratedQuizExperience, {
   type GeneratedQuestion,
 } from "@/components/GeneratedQuizExperience";
-import { extractPdfTextClient } from "@/lib/extractPdfTextClient";
-import { requestQuizGeneration } from "@/lib/quizClientRequest";
+import { parseQuizGenerateResponse } from "@/lib/quizClientRequest";
 import {
   getQuizUserMessage,
   QuizErrorCode,
@@ -29,6 +28,30 @@ export default function Home() {
 
   const canGenerate = useMemo(() => !!selectedFile && !isLoading, [selectedFile, isLoading]);
 
+  const applyQuizApiResult = (
+    api: ReturnType<typeof parseQuizGenerateResponse>,
+  ) => {
+    setErrorMessage(null);
+    if (!api.ok) {
+      setErrorMessage(api.message);
+      setQuestions([]);
+      return;
+    }
+    const fallbackExplanation =
+      "Bu soruda doğru cevap, ders metnindeki ilgili kavrama en uygun seçenektir.";
+    const list: GeneratedQuestion[] = api.questions.map((q) => {
+      const d = q.difficulty;
+      const difficulty: Difficulty =
+        d === "easy" || d === "medium" || d === "hard" ? d : "medium";
+      const ex =
+        typeof q.explanation === "string" && q.explanation.trim().length > 0
+          ? q.explanation.trim()
+          : fallbackExplanation;
+      return { ...q, difficulty, explanation: ex };
+    });
+    setQuestions(list);
+  };
+
   const handleGenerateQuiz = async () => {
     if (!selectedFile) return;
 
@@ -46,25 +69,15 @@ export default function Home() {
         return;
       }
 
-      const extracted = await extractPdfTextClient(selectedFile);
-      if (!extracted.ok) {
-        setErrorMessage(extracted.message);
-        return;
-      }
+      const formData = new FormData();
+      formData.append("file", selectedFile);
 
-      const api = await requestQuizGeneration(extracted.text);
-      if (!api.ok) {
-        setErrorMessage(api.message);
-        return;
-      }
-
-      const list: GeneratedQuestion[] = api.questions.map((q) => {
-        const d = q.difficulty;
-        const difficulty: Difficulty =
-          d === "easy" || d === "medium" || d === "hard" ? d : "medium";
-        return { ...q, difficulty };
+      const res = await fetch("/api/generate-quiz", {
+        method: "POST",
+        body: formData,
       });
-      setQuestions(list);
+      const raw = await res.text();
+      applyQuizApiResult(parseQuizGenerateResponse(res, raw));
     } catch {
       setErrorMessage(getQuizUserMessage(QuizErrorCode.CLIENT_UNEXPECTED));
     } finally {
@@ -150,7 +163,19 @@ export default function Home() {
               aria-hidden
             />
 
-            <PdfUploadDropzone onFileSelect={setSelectedFile} disabled={isLoading} minimal />
+            <PdfUploadDropzone
+              onFileSelect={setSelectedFile}
+              disabled={isLoading}
+              minimal
+              onGenerateQuizLoading={(loading) => {
+                setIsLoading(loading);
+                if (loading) {
+                  setErrorMessage(null);
+                  setQuestions([]);
+                }
+              }}
+              onGenerateQuizResult={applyQuizApiResult}
+            />
 
             <button
               type="button"

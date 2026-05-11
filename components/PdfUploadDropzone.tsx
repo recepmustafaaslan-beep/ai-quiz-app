@@ -2,18 +2,30 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import {
+  getQuizUserMessage,
+  QuizErrorCode,
+  QUIZ_UPLOAD_LIMITS,
+} from "@/lib/quizErrors";
+import { parseQuizGenerateResponse, type QuizQuestionPayload } from "@/lib/quizClientRequest";
 
 type PdfUploadDropzoneProps = {
   onFileSelect: (file: File | null) => void;
   disabled?: boolean;
   /** Daha sade kenarlık ve tipografi (landing) */
   minimal?: boolean;
+  onGenerateQuizLoading?: (loading: boolean) => void;
+  onGenerateQuizResult?: (
+    result: { ok: true; questions: QuizQuestionPayload[] } | { ok: false; message: string },
+  ) => void;
 };
 
 export default function PdfUploadDropzone({
   onFileSelect,
   disabled = false,
   minimal = false,
+  onGenerateQuizLoading,
+  onGenerateQuizResult,
 }: PdfUploadDropzoneProps) {
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -22,8 +34,42 @@ export default function PdfUploadDropzone({
       const pickedFile = acceptedFiles[0];
       setFileName(pickedFile ? pickedFile.name : null);
       onFileSelect(pickedFile ?? null);
+
+      if (!pickedFile || disabled || !onGenerateQuizResult) return;
+
+      if (pickedFile.size === 0) {
+        onGenerateQuizResult({ ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_READ_FAILED) });
+        return;
+      }
+      if (pickedFile.size > QUIZ_UPLOAD_LIMITS.maxFileBytes) {
+        onGenerateQuizResult({ ok: false, message: getQuizUserMessage(QuizErrorCode.PDF_TOO_LARGE) });
+        return;
+      }
+
+      void (async () => {
+        onGenerateQuizLoading?.(true);
+        try {
+          const formData = new FormData();
+          formData.append("file", pickedFile);
+
+          const res = await fetch("/api/generate-quiz", {
+            method: "POST",
+            body: formData,
+          });
+
+          const raw = await res.text();
+          onGenerateQuizResult(parseQuizGenerateResponse(res, raw));
+        } catch {
+          onGenerateQuizResult({
+            ok: false,
+            message: getQuizUserMessage(QuizErrorCode.CLIENT_UNEXPECTED),
+          });
+        } finally {
+          onGenerateQuizLoading?.(false);
+        }
+      })();
     },
-    [onFileSelect],
+    [disabled, onFileSelect, onGenerateQuizLoading, onGenerateQuizResult],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
