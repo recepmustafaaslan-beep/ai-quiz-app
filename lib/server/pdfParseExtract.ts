@@ -14,6 +14,16 @@ export async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string
     try {
       const result = await parser.getText();
       fromParse = (result.text ?? "").trim();
+      if (
+        fromParse.length === 0 &&
+        Array.isArray(result.pages) &&
+        result.pages.length > 0
+      ) {
+        fromParse = result.pages
+          .map((p: { text?: string }) => (typeof p.text === "string" ? p.text : ""))
+          .join("\n\n")
+          .trim();
+      }
     } finally {
       try {
         await parser.destroy();

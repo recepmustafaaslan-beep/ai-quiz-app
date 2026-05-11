@@ -23,7 +23,8 @@ function isPageNumberLine(line: string): boolean {
 function isLikelyFooterOrHeaderLine(line: string): boolean {
   const t = line.trim();
   if (t.length === 0) return true;
-  if (t.length <= 2) return true;
+  /** 1–2 karakter: yalnızca harf/rakam yoksa gürültü say (PDF tek harf satırlarını silme) */
+  if (t.length <= 2 && !/[a-zA-ZğüşıöçĞÜŞİÖÇ0-9]/.test(t)) return true;
   if (/^https?:\/\/\S+$/i.test(t)) return true;
   if (/^www\.\S+$/i.test(t)) return true;
   if (/^\S+@\S+\.\S+$/.test(t)) return true;
@@ -138,4 +139,27 @@ export function preprocessPdfText(raw: string): string {
   const normalized = stripControlAndNoiseChars(raw).trim();
   if (!normalized) return "";
   return preprocessPdfPages([normalized]);
+}
+
+/**
+ * Agresif ön işleme tüm metni sildiğinde (çok tekrarlayan kısa satır vb.) kullanılır;
+ * yalnızca kontrol karakterleri ve fazla boşluk temizlenir — quiz için minimum içerik korunur.
+ */
+export function lightCleanExtractedPdfRaw(raw: string): string {
+  const s = stripControlAndNoiseChars(raw);
+  return s
+    .split("\n")
+    .map((line) => line.replace(/[\t\u00A0]+/g, " ").replace(/[ \u3000]+/g, " ").trim())
+    .filter((line) => line.length > 0)
+    .join("\n")
+    .trim();
+}
+
+/**
+ * Önce tam ön işleme; boş kalırsa hafif temizlik (PDF çıktısı korunur).
+ */
+export function preprocessExtractedPdfForAi(raw: string): string {
+  const primary = preprocessPdfText(raw);
+  if (primary.trim().length > 0) return primary;
+  return lightCleanExtractedPdfRaw(raw);
 }

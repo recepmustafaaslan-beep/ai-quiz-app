@@ -1,4 +1,4 @@
-import { preprocessPdfText } from "@/lib/preprocessPdfText";
+import { preprocessExtractedPdfForAi } from "@/lib/preprocessPdfText";
 import {
   getQuizUserMessage,
   QuizErrorCode,
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "PDF okunamadı" }, { status: 400 });
     }
 
-    const processed = preprocessPdfText(text);
+    const processed = preprocessExtractedPdfForAi(text);
 
     if (!processed.trim()) {
       return Response.json({ error: "PDF okunamadı" }, { status: 400 });

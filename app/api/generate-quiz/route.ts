@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import { preprocessPdfText } from "@/lib/preprocessPdfText";
+import { preprocessExtractedPdfForAi } from "@/lib/preprocessPdfText";
 import {
   getQuizUserMessage,
   QuizErrorCode,
@@ -177,7 +177,7 @@ async function resolvePdfTextFromRequest(req: Request): Promise<
         return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
       }
 
-      const text = preprocessPdfText(raw);
+      const text = preprocessExtractedPdfForAi(raw);
       if (!text || text.trim().length === 0) {
         return { ok: false, response: jsonError(QuizErrorCode.PDF_EMPTY, 400) };
       }
