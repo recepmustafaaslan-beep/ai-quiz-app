@@ -38,8 +38,8 @@ export default function PdfUploadDropzone({
   const box = minimal
     ? `rounded-lg border border-dashed p-6 text-center transition-colors ${
         isDragActive
-          ? "border-zinc-500 bg-zinc-800/50"
-          : "border-zinc-700 bg-zinc-950/30 hover:border-zinc-600 hover:bg-zinc-900/50"
+          ? "border-amber-400/50 bg-amber-500/10"
+          : "border-zinc-600/80 bg-zinc-900/40 hover:border-amber-400/35 hover:bg-zinc-900/70"
       } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`
     : `group relative overflow-hidden rounded-2xl border-2 border-dashed p-8 text-center transition-all duration-300 ease-out ${
         isDragActive

@@ -15,6 +15,10 @@ import {
   QUIZ_UPLOAD_LIMITS,
 } from "@/lib/quizErrors";
 
+/** Ders notu / çalışma masası — Unsplash (ücretsiz kullanım) */
+const LANDING_BG =
+  "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=2400&q=80";
+
 type Difficulty = "easy" | "medium" | "hard";
 
 export default function Home() {
@@ -69,40 +73,90 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+    <div className="relative min-h-screen overflow-x-hidden text-zinc-100 antialiased">
       <QuizGeneratingOverlay open={isLoading} />
 
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(255,255,255,0.06),transparent)]" />
+      {/* Fotoğraf */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-30 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${LANDING_BG})` }}
+        aria-hidden
+      />
 
-      <header className="mx-auto flex max-w-3xl items-center justify-between border-b border-zinc-800/80 px-6 py-5 sm:px-8">
-        <span className="text-sm font-medium tracking-tight text-zinc-300">Quiz</span>
+      {/* Okunabilirlik: koyu sıcak scrim + renkli glow */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-20 bg-gradient-to-b from-zinc-950/88 via-indigo-950/75 to-amber-950/55"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 -z-20 bg-[radial-gradient(ellipse_100%_80%_at_50%_0%,rgba(251,191,36,0.12),transparent_50%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none fixed inset-0 -z-20 bg-[radial-gradient(ellipse_60%_50%_at_100%_30%,rgba(167,139,250,0.18),transparent_45%)]"
+        aria-hidden
+      />
+      <div className="landing-lined pointer-events-none fixed inset-0 -z-20 opacity-90" aria-hidden />
+      <div className="landing-noise pointer-events-none fixed inset-0 -z-10 opacity-70 mix-blend-overlay" aria-hidden />
+
+      {/* Dekor: yapışkan not hissi */}
+      <div
+        className="landing-float pointer-events-none absolute -left-4 top-28 hidden h-24 w-28 rounded-sm bg-amber-300/25 shadow-lg shadow-amber-900/20 ring-1 ring-amber-200/30 backdrop-blur-[2px] sm:block md:left-[8%] md:top-36"
+        aria-hidden
+      />
+      <div
+        className="landing-float-delayed pointer-events-none absolute -right-6 top-48 hidden h-20 w-24 rounded-sm bg-emerald-400/20 shadow-lg shadow-emerald-900/25 ring-1 ring-emerald-200/25 backdrop-blur-[2px] sm:block md:right-[6%] md:top-52"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute bottom-[18%] left-[4%] hidden h-16 w-20 rotate-[-11deg] rounded-sm bg-rose-400/15 shadow-md ring-1 ring-rose-200/20 backdrop-blur-sm md:block"
+        aria-hidden
+      />
+
+      <header className="relative z-10 mx-auto flex max-w-5xl items-center justify-between border-b border-white/10 bg-zinc-950/30 px-6 py-5 backdrop-blur-md sm:px-10">
+        <span className="bg-gradient-to-r from-amber-100 to-amber-50 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
+          Quiz
+        </span>
         <Link
           href="/quiz"
-          className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+          className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-amber-300/40 hover:bg-amber-500/10 hover:text-white"
         >
           Klasik mod
         </Link>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-6 pb-24 pt-16 sm:px-8 sm:pt-24">
-        <div className="mx-auto w-full max-w-lg">
-          <h1 className="text-center text-[1.375rem] font-medium leading-snug tracking-tight text-zinc-100 sm:text-2xl">
-            <span className="text-zinc-400">PDF yükle</span>
-            <span className="mx-2 text-zinc-600 sm:mx-2.5" aria-hidden>
+      <main className="relative z-10 mx-auto w-full max-w-5xl px-6 pb-28 pt-12 sm:px-10 sm:pt-16">
+        <div className="relative mx-auto w-full max-w-lg">
+          <div className="absolute -inset-x-8 -top-6 h-32 bg-gradient-to-b from-amber-400/10 to-transparent blur-2xl sm:-inset-x-16" aria-hidden />
+
+          <h1 className="animate-fade-rise relative text-center text-xl font-semibold leading-snug tracking-tight sm:text-[1.65rem] sm:leading-tight">
+            <span className="text-zinc-200/90">PDF yükle</span>
+            <span className="mx-2 inline-block text-amber-300/90 sm:mx-2.5" aria-hidden>
               →
             </span>
-            <span className="text-zinc-100">AI quiz oluşturur</span>
+            <span className="bg-gradient-to-r from-amber-200 via-yellow-200 to-lime-200 bg-clip-text text-transparent drop-shadow-[0_0_28px_rgba(251,191,36,0.35)]">
+              AI quiz oluşturur
+            </span>
           </h1>
           <p className="sr-only">PDF yükle → AI quiz oluşturur</p>
 
-          <div className="mt-14 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 sm:p-6">
+          <div className="animate-fade-rise-delay-1 relative mt-14 overflow-hidden rounded-2xl border border-amber-400/25 bg-zinc-950/65 p-5 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] ring-1 ring-inset ring-white/10 backdrop-blur-xl sm:p-6">
+            <div
+              className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-violet-500/20 blur-3xl"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute -bottom-12 -left-12 h-36 w-36 rounded-full bg-amber-500/15 blur-3xl"
+              aria-hidden
+            />
+
             <PdfUploadDropzone onFileSelect={setSelectedFile} disabled={isLoading} minimal />
 
             <button
               type="button"
               onClick={handleGenerateQuiz}
               disabled={!canGenerate}
-              className="mt-5 w-full rounded-lg bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-zinc-100"
+              className="relative mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-[0_12px_40px_-8px_rgba(251,191,36,0.45)] transition hover:brightness-105 hover:shadow-[0_16px_48px_-6px_rgba(251,191,36,0.5)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 disabled:hover:shadow-none"
             >
               Quiz oluştur
             </button>
@@ -110,7 +164,7 @@ export default function Home() {
             {errorMessage && (
               <div
                 role="alert"
-                className="mt-4 rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2.5 text-sm text-red-200/90"
+                className="relative mt-4 rounded-xl border border-red-500/35 bg-red-950/50 px-3 py-2.5 text-sm text-red-100 backdrop-blur-sm"
               >
                 {errorMessage}
               </div>
@@ -119,7 +173,7 @@ export default function Home() {
         </div>
 
         {questions.length > 0 && (
-          <div className="mx-auto mt-20 w-full max-w-2xl border-t border-zinc-800/80 pt-16">
+          <div className="animate-fade-rise-delay-2 relative mx-auto mt-20 w-full max-w-2xl border-t border-white/10 pt-16">
             <GeneratedQuizExperience questions={questions} />
           </div>
         )}
